@@ -1,0 +1,11 @@
+{
+  "appid": "touristappid",
+  "projectname": "wechat-blocks",
+  "miniprogramRoot": "dist/",
+  "compileType": "game",
+  "setting": {
+    "es6": true,
+    "minified": true,
+    "urlCheck": false
+  }
+}
