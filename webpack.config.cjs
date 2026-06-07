@@ -34,8 +34,8 @@ module.exports = (_env, argv) => {
       new CopyWebpackPlugin({
         patterns: [
           {
-            from: path.resolve(__dirname, "game.config.json"),
-            to: path.resolve(__dirname, "dist/game.config.json")
+            from: path.resolve(__dirname, "game.json"),
+            to: path.resolve(__dirname, "dist/game.json")
           }
         ]
       })
