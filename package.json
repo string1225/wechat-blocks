@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "webpack serve --config webpack.config.cjs --mode development",
     "build": "webpack --config webpack.config.cjs --mode production",
+    "test": "node --test test/*.test.cjs",
     "typecheck": "tsc --noEmit",
     "wechat:check": "node scripts/wechat-ci.cjs check",
     "wechat:preview": "npm run build && node scripts/wechat-ci.cjs preview",

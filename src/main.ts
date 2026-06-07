@@ -20,7 +20,7 @@ ui.bind({
 game.start();
 
 function createRuntime(): { canvas: HTMLCanvasElement; ui: GameUi } {
-  if (typeof document !== "undefined") {
+  if (hasBrowserCanvasDocument()) {
     const canvas = document.getElementById("game-canvas");
     if (!(canvas instanceof HTMLCanvasElement)) {
       throw new Error("Missing browser canvas.");
@@ -42,4 +42,12 @@ function createRuntime(): { canvas: HTMLCanvasElement; ui: GameUi } {
     canvas,
     ui: new NoopHud()
   };
+}
+
+function hasBrowserCanvasDocument(): boolean {
+  return (
+    typeof document !== "undefined" &&
+    typeof document.getElementById === "function" &&
+    typeof HTMLCanvasElement !== "undefined"
+  );
 }
