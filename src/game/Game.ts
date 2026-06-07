@@ -162,7 +162,10 @@ export class Game {
       return;
     }
 
-    this.flyBlock(block, this.grid.getDirectionForFace(block, pick.faceNormal), "Fly");
+    const direction = this.grid.getDirectionForFace(block, pick.faceNormal);
+    if (direction) {
+      this.flyBlock(block, direction, "Fly");
+    }
   }
 
   private flyBlock(block: GridBlock, direction: Position3, source: FlightSource): boolean {

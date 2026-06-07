@@ -68,13 +68,13 @@ export class CubeGrid {
     return block && block.active && !block.flying ? block : null;
   }
 
-  getDirectionForFace(block: GridBlock, normal: Position3): Position3 {
+  getDirectionForFace(block: GridBlock, normal: Position3): Position3 | null {
     const arrow = block.faceArrows.find((item) => sameDirection(item.normal, normal));
     if (arrow) {
       return { ...arrow.direction };
     }
 
-    return { ...block.faceArrows[0]!.direction };
+    return null;
   }
 
   beginFlight(block: GridBlock, direction: Position3): boolean {
@@ -411,20 +411,15 @@ function createSolvableFaceArrowMap(size: number, rng: () => number): Map<string
   for (const position of allPositions(size)) {
     const key = positionKey(position);
     const guaranteed = assigned.get(key);
-    const arrows = FACE_NORMALS.map((normal) => ({
-      normal: { ...normal },
-      direction: chooseFaceDirection(position, normal, size, rng)
-    }));
-
-    if (guaranteed) {
-      const index = arrows.findIndex((arrow) => sameDirection(arrow.normal, guaranteed.normal));
-      if (index >= 0) {
-        arrows[index] = {
-          normal: { ...guaranteed.normal },
-          direction: { ...guaranteed.direction }
-        };
-      }
+    if (!guaranteed) {
+      throw new Error(`Missing guaranteed arrow for ${key}.`);
     }
+
+    const direction = { ...guaranteed.direction };
+    const arrows = FACE_NORMALS.filter((normal) => dot(normal, direction) === 0).map((normal) => ({
+      normal: { ...normal },
+      direction: { ...direction }
+    }));
 
     arrowsByPosition.set(key, arrows);
   }
@@ -470,26 +465,6 @@ function isRemovableByArrows(
       isFaceExposed(position, arrow.normal, occupied, size) &&
       hasClearPathToOutside(position, arrow.direction, occupied, size)
   );
-}
-
-function chooseFaceDirection(position: Position3, normal: Position3, size: number, rng: () => number): Position3 {
-  const candidates = FACE_NORMALS.filter((direction) => dot(normal, direction) === 0);
-  const scored = candidates.map((direction) => ({
-    direction,
-    distance: distanceToBoundary(position, direction, size)
-  }));
-  const bestDistance = Math.min(...scored.map((item) => item.distance));
-  const best = scored.filter((item) => item.distance === bestDistance).map((item) => item.direction);
-  return { ...pickOne(best, rng) };
-}
-
-function distanceToBoundary(position: Position3, direction: Position3, size: number): number {
-  if (direction.x > 0) return size - 1 - position.x;
-  if (direction.x < 0) return position.x;
-  if (direction.y > 0) return size - 1 - position.y;
-  if (direction.y < 0) return position.y;
-  if (direction.z > 0) return size - 1 - position.z;
-  return position.z;
 }
 
 function hasClearPathToOutside(

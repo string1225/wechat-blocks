@@ -7,6 +7,18 @@ export interface PickResult {
   faceNormal: Position3;
 }
 
+const ARROW_STROKE_WIDTH = 0.036;
+const FACE_BORDER_WIDTH = 0.014;
+const FACE_OFFSET = 0.014;
+const FACE_NORMALS: readonly Position3[] = [
+  { x: 1, y: 0, z: 0 },
+  { x: -1, y: 0, z: 0 },
+  { x: 0, y: 1, z: 0 },
+  { x: 0, y: -1, z: 0 },
+  { x: 0, y: 0, z: 1 },
+  { x: 0, y: 0, z: -1 }
+];
+
 export class GameScene {
   readonly camera: THREE.PerspectiveCamera;
 
@@ -18,34 +30,64 @@ export class GameScene {
   private readonly rotation = new THREE.Quaternion();
   private readonly pointer = new THREE.Vector2();
   private readonly target = new THREE.Vector3();
-  private readonly arrowGeometry = createArrowLineGeometry();
-  private readonly arrowMaterial = new THREE.LineBasicMaterial({
-    color: 0x17341f,
+  private readonly arrowGeometry = createArrowStrokeGeometry();
+  private readonly arrowMaterial = new THREE.MeshBasicMaterial({
+    color: 0x102717,
     transparent: true,
-    opacity: 0.92,
+    opacity: 0.95,
+    side: THREE.DoubleSide,
     depthTest: true,
     depthWrite: false,
     polygonOffset: true,
     polygonOffsetFactor: -2,
     polygonOffsetUnits: -2
   });
-  private readonly edgeGeometry = new THREE.EdgesGeometry(new THREE.BoxGeometry(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE));
-  private readonly edgeMaterial = new THREE.LineBasicMaterial({
-    color: 0x17341f,
+  private readonly faceBorderGeometry = createFaceBorderGeometry();
+  private readonly faceBorderMaterial = new THREE.MeshBasicMaterial({
+    color: 0x122a17,
     transparent: true,
-    opacity: 0.88
+    opacity: 0.8,
+    side: THREE.DoubleSide,
+    depthTest: true,
+    depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -1
+  });
+  private readonly blankFaceGeometry = new THREE.PlaneGeometry(BLOCK_SIZE * 0.9, BLOCK_SIZE * 0.9);
+  private readonly blankFaceMaterial = new THREE.MeshBasicMaterial({
+    color: 0x102717,
+    transparent: true,
+    opacity: 0.16,
+    side: THREE.DoubleSide,
+    depthTest: true,
+    depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -1
   });
   private readonly arrowMatrix = new THREE.Matrix4();
   private readonly arrowXAxis = new THREE.Vector3();
   private readonly arrowYAxis = new THREE.Vector3();
   private readonly arrowZAxis = new THREE.Vector3();
-  private arrowMeshes: Array<{
+  private readonly faceMatrix = new THREE.Matrix4();
+  private readonly faceXAxis = new THREE.Vector3();
+  private readonly faceYAxis = new THREE.Vector3();
+  private readonly faceZAxis = new THREE.Vector3();
+  private readonly overlayPosition = new THREE.Vector3();
+  private readonly overlayScale = new THREE.Vector3();
+  private readonly overlayQuaternion = new THREE.Quaternion();
+  private arrowOverlays: Array<{
     block: GridBlock;
     direction: THREE.Vector3;
-    line: THREE.LineSegments;
+    index: number;
     normal: THREE.Vector3;
   }> = [];
-  private edgeLines: Array<{ block: GridBlock; line: THREE.LineSegments }> = [];
+  private faceBorderOverlays: Array<{ block: GridBlock; index: number; normal: Position3 }> = [];
+  private blankFaceOverlays: Array<{ block: GridBlock; index: number; normal: Position3 }> = [];
+  private arrowMesh: THREE.InstancedMesh | null = null;
+  private faceBorderMesh: THREE.InstancedMesh | null = null;
+  private blankFaceMesh: THREE.InstancedMesh | null = null;
   private mesh: THREE.InstancedMesh | null = null;
   private theta = Math.PI * 0.22;
   private phi = Math.PI * 0.34;
@@ -123,7 +165,7 @@ export class GameScene {
 
     this.mesh.instanceMatrix.needsUpdate = true;
 
-    this.updateBlockOverlays();
+    this.updateBlockOverlays(blocks);
   }
 
   pickBlock(clientX: number, clientY: number): PickResult | null {
@@ -280,67 +322,265 @@ export class GameScene {
   }
 
   private createBlockOverlays(blocks: readonly GridBlock[]): void {
+    this.arrowOverlays = [];
+    this.faceBorderOverlays = [];
+    this.blankFaceOverlays = [];
+
     for (const block of blocks) {
-      const line = new THREE.LineSegments(this.edgeGeometry, this.edgeMaterial);
-      line.renderOrder = 2;
-      this.edgeLines.push({ block, line });
-      this.scene.add(line);
+      for (const normal of FACE_NORMALS) {
+        this.faceBorderOverlays.push({
+          block,
+          index: this.faceBorderOverlays.length,
+          normal
+        });
+      }
+
+      for (const normal of getBlankFaceNormals(block)) {
+        this.blankFaceOverlays.push({
+          block,
+          index: this.blankFaceOverlays.length,
+          normal
+        });
+      }
 
       for (const arrow of block.faceArrows) {
-        const line = new THREE.LineSegments(this.arrowGeometry, this.arrowMaterial);
-        line.renderOrder = 3;
-        this.arrowMeshes.push({
+        this.arrowOverlays.push({
           block,
           direction: positionToVector(arrow.direction),
-          line,
+          index: this.arrowOverlays.length,
           normal: positionToVector(arrow.normal)
         });
-        this.scene.add(line);
       }
     }
+
+    this.faceBorderMesh = new THREE.InstancedMesh(
+      this.faceBorderGeometry,
+      this.faceBorderMaterial,
+      Math.max(1, this.faceBorderOverlays.length)
+    );
+    this.faceBorderMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.faceBorderMesh.renderOrder = 2;
+    this.scene.add(this.faceBorderMesh);
+
+    this.blankFaceMesh = new THREE.InstancedMesh(
+      this.blankFaceGeometry,
+      this.blankFaceMaterial,
+      Math.max(1, this.blankFaceOverlays.length)
+    );
+    this.blankFaceMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.blankFaceMesh.renderOrder = 2;
+    this.scene.add(this.blankFaceMesh);
+
+    this.arrowMesh = new THREE.InstancedMesh(
+      this.arrowGeometry,
+      this.arrowMaterial,
+      Math.max(1, this.arrowOverlays.length)
+    );
+    this.arrowMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.arrowMesh.renderOrder = 3;
+    this.scene.add(this.arrowMesh);
   }
 
   private clearBlockOverlays(): void {
-    for (const item of this.edgeLines) {
-      this.scene.remove(item.line);
+    if (this.faceBorderMesh) {
+      this.scene.remove(this.faceBorderMesh);
+      this.faceBorderMesh.dispose();
+      this.faceBorderMesh = null;
     }
-    this.edgeLines = [];
 
-    for (const item of this.arrowMeshes) {
-      this.scene.remove(item.line);
+    if (this.blankFaceMesh) {
+      this.scene.remove(this.blankFaceMesh);
+      this.blankFaceMesh.dispose();
+      this.blankFaceMesh = null;
     }
-    this.arrowMeshes = [];
+
+    if (this.arrowMesh) {
+      this.scene.remove(this.arrowMesh);
+      this.arrowMesh.dispose();
+      this.arrowMesh = null;
+    }
+
+    this.faceBorderOverlays = [];
+    this.blankFaceOverlays = [];
+    this.arrowOverlays = [];
   }
 
-  private updateBlockOverlays(): void {
-    for (const item of this.edgeLines) {
-      item.line.visible = item.block.active;
-      item.line.position.copy(item.block.current);
-      item.line.scale.setScalar(item.block.active ? item.block.scale : 0.001);
+  private updateBlockOverlays(blocks: readonly GridBlock[]): void {
+    const occupied = new Set(
+      blocks.filter((block) => block.active && !block.flying).map((block) => positionKey(block.grid))
+    );
+
+    if (this.faceBorderMesh) {
+      for (const item of this.faceBorderOverlays) {
+        const visible = item.block.active && isFaceExposed(item.block, item.normal, occupied, this.activeSize);
+        this.setFaceOverlayMatrix(this.faceBorderMesh, item.index, item.block, item.normal, visible, FACE_OFFSET);
+      }
+      this.faceBorderMesh.instanceMatrix.needsUpdate = true;
     }
 
-    for (const item of this.arrowMeshes) {
-      item.line.visible = item.block.active;
-      item.line.position.copy(item.block.current).addScaledVector(item.normal, (BLOCK_SIZE / 2) * item.block.scale + 0.012);
-      this.arrowYAxis.copy(item.direction).normalize();
-      this.arrowZAxis.copy(item.normal).normalize();
-      this.arrowXAxis.crossVectors(this.arrowYAxis, this.arrowZAxis).normalize();
-      this.arrowMatrix.makeBasis(this.arrowXAxis, this.arrowYAxis, this.arrowZAxis);
-      item.line.quaternion.setFromRotationMatrix(this.arrowMatrix);
-      item.line.scale.setScalar(item.block.active ? item.block.scale : 0.001);
+    if (this.blankFaceMesh) {
+      for (const item of this.blankFaceOverlays) {
+        const visible = item.block.active && isFaceExposed(item.block, item.normal, occupied, this.activeSize);
+        this.setFaceOverlayMatrix(this.blankFaceMesh, item.index, item.block, item.normal, visible, FACE_OFFSET * 1.2);
+      }
+      this.blankFaceMesh.instanceMatrix.needsUpdate = true;
     }
+
+    if (this.arrowMesh) {
+      for (const item of this.arrowOverlays) {
+        const visible =
+          item.block.active && isFaceExposed(item.block, vectorToPosition(item.normal), occupied, this.activeSize);
+        this.setArrowOverlayMatrix(this.arrowMesh, item.index, item, visible);
+      }
+      this.arrowMesh.instanceMatrix.needsUpdate = true;
+    }
+  }
+
+  private setFaceOverlayMatrix(
+    mesh: THREE.InstancedMesh,
+    index: number,
+    block: GridBlock,
+    normal: Position3,
+    visible: boolean,
+    offset: number
+  ): void {
+    const normalVector = positionToVector(normal);
+    this.overlayPosition.copy(block.current).addScaledVector(normalVector, (BLOCK_SIZE / 2) * block.scale + offset);
+    this.faceZAxis.copy(normalVector);
+    const reference = Math.abs(this.faceZAxis.y) > 0.8 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(0, 1, 0);
+    this.faceXAxis.crossVectors(reference, this.faceZAxis).normalize();
+    this.faceYAxis.crossVectors(this.faceZAxis, this.faceXAxis).normalize();
+    this.faceMatrix.makeBasis(this.faceXAxis, this.faceYAxis, this.faceZAxis);
+    this.overlayQuaternion.setFromRotationMatrix(this.faceMatrix);
+    this.overlayScale.setScalar(visible ? block.scale : 0.001);
+    this.matrix.compose(this.overlayPosition, this.overlayQuaternion, this.overlayScale);
+    mesh.setMatrixAt(index, this.matrix);
+  }
+
+  private setArrowOverlayMatrix(
+    mesh: THREE.InstancedMesh,
+    index: number,
+    item: { block: GridBlock; direction: THREE.Vector3; normal: THREE.Vector3 },
+    visible: boolean
+  ): void {
+    this.overlayPosition
+      .copy(item.block.current)
+      .addScaledVector(item.normal, (BLOCK_SIZE / 2) * item.block.scale + FACE_OFFSET * 1.4);
+    this.arrowYAxis.copy(item.direction).normalize();
+    this.arrowZAxis.copy(item.normal).normalize();
+    this.arrowXAxis.crossVectors(this.arrowYAxis, this.arrowZAxis).normalize();
+    this.arrowMatrix.makeBasis(this.arrowXAxis, this.arrowYAxis, this.arrowZAxis);
+    this.overlayQuaternion.setFromRotationMatrix(this.arrowMatrix);
+    this.overlayScale.setScalar(visible ? item.block.scale : 0.001);
+    this.matrix.compose(this.overlayPosition, this.overlayQuaternion, this.overlayScale);
+    mesh.setMatrixAt(index, this.matrix);
   }
 }
 
-function createArrowLineGeometry(): THREE.BufferGeometry {
-  return new THREE.BufferGeometry().setFromPoints([
-    new THREE.Vector3(0, -0.28, 0),
-    new THREE.Vector3(0, 0.22, 0),
-    new THREE.Vector3(0, 0.22, 0),
-    new THREE.Vector3(-0.14, 0.06, 0),
-    new THREE.Vector3(0, 0.22, 0),
-    new THREE.Vector3(0.14, 0.06, 0)
-  ]);
+function createArrowStrokeGeometry(): THREE.BufferGeometry {
+  return createStrokeGeometry([
+    [new THREE.Vector2(0, -0.28), new THREE.Vector2(0, 0.22)],
+    [new THREE.Vector2(0, 0.22), new THREE.Vector2(-0.16, 0.06)],
+    [new THREE.Vector2(0, 0.22), new THREE.Vector2(0.16, 0.06)]
+  ], ARROW_STROKE_WIDTH);
+}
+
+function createFaceBorderGeometry(): THREE.BufferGeometry {
+  const half = BLOCK_SIZE / 2;
+  return createStrokeGeometry([
+    [new THREE.Vector2(-half, -half), new THREE.Vector2(half, -half)],
+    [new THREE.Vector2(half, -half), new THREE.Vector2(half, half)],
+    [new THREE.Vector2(half, half), new THREE.Vector2(-half, half)],
+    [new THREE.Vector2(-half, half), new THREE.Vector2(-half, -half)]
+  ], FACE_BORDER_WIDTH);
+}
+
+function createStrokeGeometry(segments: Array<[THREE.Vector2, THREE.Vector2]>, width: number): THREE.BufferGeometry {
+  const positions: number[] = [];
+  const halfWidth = width / 2;
+
+  for (const [start, end] of segments) {
+    const delta = end.clone().sub(start);
+    if (delta.lengthSq() === 0) {
+      continue;
+    }
+    const perpendicular = new THREE.Vector2(-delta.y, delta.x).normalize().multiplyScalar(halfWidth);
+    const a = start.clone().add(perpendicular);
+    const b = start.clone().sub(perpendicular);
+    const c = end.clone().add(perpendicular);
+    const d = end.clone().sub(perpendicular);
+
+    positions.push(
+      a.x, a.y, 0,
+      b.x, b.y, 0,
+      c.x, c.y, 0,
+      c.x, c.y, 0,
+      b.x, b.y, 0,
+      d.x, d.y, 0
+    );
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  return geometry;
+}
+
+function getBlankFaceNormals(block: GridBlock): Position3[] {
+  const direction = block.faceArrows[0]?.direction;
+  if (!direction) {
+    return [];
+  }
+
+  return FACE_NORMALS.filter((normal) => Math.abs(dot(normal, direction)) === 1);
+}
+
+function isFaceExposed(
+  block: GridBlock,
+  normal: Position3,
+  occupied: ReadonlySet<string>,
+  size: number
+): boolean {
+  if (block.flying) {
+    return true;
+  }
+
+  const neighbor = addPosition(block.grid, normal);
+  return !isInsidePosition(neighbor, size) || !occupied.has(positionKey(neighbor));
+}
+
+function addPosition(a: Position3, b: Position3): Position3 {
+  return {
+    x: a.x + b.x,
+    y: a.y + b.y,
+    z: a.z + b.z
+  };
+}
+
+function positionKey(position: Position3): string {
+  return `${position.x}:${position.y}:${position.z}`;
+}
+
+function isInsidePosition(position: Position3, size: number): boolean {
+  return (
+    position.x >= 0 &&
+    position.x < size &&
+    position.y >= 0 &&
+    position.y < size &&
+    position.z >= 0 &&
+    position.z < size
+  );
+}
+
+function dot(a: Position3, b: Position3): number {
+  return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
+function vectorToPosition(vector: THREE.Vector3): Position3 {
+  return {
+    x: Math.round(vector.x),
+    y: Math.round(vector.y),
+    z: Math.round(vector.z)
+  };
 }
 
 function dominantAxis(vector: THREE.Vector3): Position3 {
