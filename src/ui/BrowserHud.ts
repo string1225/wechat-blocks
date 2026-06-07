@@ -15,7 +15,6 @@ export class BrowserHud implements GameUi {
   private readonly zoomOut = mustGet<HTMLButtonElement>("hud-zoom-out");
   private readonly undoCount = mustGet<HTMLElement>("hud-undo-count");
   private readonly bombCount = mustGet<HTMLElement>("hud-bomb-count");
-  private readonly autoState = mustGet<HTMLElement>("hud-auto-state");
   private readonly levelStrip = mustGet<HTMLElement>("level-strip");
   private readonly toast = mustGet<HTMLElement>("toast");
   private readonly result = mustGet<HTMLElement>("result");
@@ -53,7 +52,6 @@ export class BrowserHud implements GameUi {
     this.stars.textContent = renderStars(state.stars);
     this.undoCount.textContent = String(state.powerups.undo);
     this.bombCount.textContent = String(state.powerups.bomb);
-    this.autoState.textContent = state.autoRunning ? "开启" : "关闭";
 
     this.next.disabled = state.level >= state.levelCount;
     this.undo.disabled = !state.canUndo || state.phase !== "playing";
@@ -68,6 +66,7 @@ export class BrowserHud implements GameUi {
       this.auto.innerHTML = `<i data-lucide="${autoIcon}"></i>${label}`;
       renderIcons();
     }
+    mustGet<HTMLElement>("hud-auto-state").textContent = state.autoRunning ? "开启" : "关闭";
 
     for (const button of Array.from(this.levelStrip.querySelectorAll<HTMLButtonElement>(".level-button"))) {
       button.dataset.active = String(Number(button.dataset.level) === state.level);

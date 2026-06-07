@@ -3,7 +3,7 @@ import type { FaceArrow, GridSnapshot, LevelConfig, Position3 } from "../game/ty
 import { createRng, pickOne } from "../systems/random";
 
 export const BLOCK_SIZE = 0.82;
-export const BLOCK_COLOR = "#20f2ee";
+export const BLOCK_COLOR = "#4dfc59";
 
 export interface GridBlock {
   id: string;

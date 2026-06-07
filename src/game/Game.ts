@@ -6,6 +6,8 @@ import { GameScene } from "./GameScene";
 import { InputController } from "./InputController";
 import type { GamePhase, LevelConfig, Position3, PowerupState, TurnSnapshot } from "./types";
 
+type FlightSource = "Fly" | "Bomb" | "Silent";
+
 export class Game {
   private readonly scene: GameScene;
   private readonly input: InputController;
@@ -115,7 +117,6 @@ export class Game {
 
     this.autoRunning = !this.autoRunning;
     this.autoCooldown = 0;
-    this.ui.showToast(this.autoRunning ? "Auto" : "Pause");
     this.updateUi();
   }
 
@@ -164,7 +165,7 @@ export class Game {
     this.flyBlock(block, this.grid.getDirectionForFace(block, pick.faceNormal), "Fly");
   }
 
-  private flyBlock(block: GridBlock, direction: Position3, source: string): boolean {
+  private flyBlock(block: GridBlock, direction: Position3, source: FlightSource): boolean {
     if (this.phase !== "playing") {
       return false;
     }
@@ -181,8 +182,8 @@ export class Game {
     this.history.push(snapshot);
     this.history = this.history.slice(-30);
     this.moves += 1;
-    if (source !== "Fly") {
-      this.ui.showToast(source);
+    if (source === "Bomb") {
+      this.ui.showToast("Bomb");
     }
     this.updateUi();
     return true;
@@ -209,7 +210,7 @@ export class Game {
       return;
     }
 
-    this.flyBlock(move.block, move.direction, "Auto");
+    this.flyBlock(move.block, move.direction, "Silent");
     this.autoCooldown = 0.28;
   }
 
@@ -249,7 +250,7 @@ export class Game {
   private updateUi(): void {
     const state: UiState = {
       autoRunning: this.autoRunning,
-      canUndo: this.history.length > 0 && this.powerups.undo > 0 && !this.grid.isAnimating(),
+      canUndo: this.history.length > 0 && this.powerups.undo > 0,
       level: this.level.id,
       levelCount: LEVEL_COUNT,
       maxMoves: this.level.maxMoves,

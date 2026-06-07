@@ -18,12 +18,11 @@ export class GameScene {
   private readonly rotation = new THREE.Quaternion();
   private readonly pointer = new THREE.Vector2();
   private readonly target = new THREE.Vector3();
-  private readonly arrowGeometry = createArrowGeometry();
-  private readonly arrowMaterial = new THREE.MeshBasicMaterial({
-    color: 0x10151a,
-    side: THREE.DoubleSide,
+  private readonly arrowGeometry = createArrowLineGeometry();
+  private readonly arrowMaterial = new THREE.LineBasicMaterial({
+    color: 0x17341f,
     transparent: true,
-    opacity: 1,
+    opacity: 0.92,
     depthTest: true,
     depthWrite: false,
     polygonOffset: true,
@@ -43,7 +42,7 @@ export class GameScene {
   private arrowMeshes: Array<{
     block: GridBlock;
     direction: THREE.Vector3;
-    mesh: THREE.Mesh;
+    line: THREE.LineSegments;
     normal: THREE.Vector3;
   }> = [];
   private edgeLines: Array<{ block: GridBlock; line: THREE.LineSegments }> = [];
@@ -288,15 +287,15 @@ export class GameScene {
       this.scene.add(line);
 
       for (const arrow of block.faceArrows) {
-        const mesh = new THREE.Mesh(this.arrowGeometry, this.arrowMaterial);
-        mesh.renderOrder = 3;
+        const line = new THREE.LineSegments(this.arrowGeometry, this.arrowMaterial);
+        line.renderOrder = 3;
         this.arrowMeshes.push({
           block,
           direction: positionToVector(arrow.direction),
-          mesh,
+          line,
           normal: positionToVector(arrow.normal)
         });
-        this.scene.add(mesh);
+        this.scene.add(line);
       }
     }
   }
@@ -308,7 +307,7 @@ export class GameScene {
     this.edgeLines = [];
 
     for (const item of this.arrowMeshes) {
-      this.scene.remove(item.mesh);
+      this.scene.remove(item.line);
     }
     this.arrowMeshes = [];
   }
@@ -321,29 +320,27 @@ export class GameScene {
     }
 
     for (const item of this.arrowMeshes) {
-      item.mesh.visible = item.block.active;
-      item.mesh.position.copy(item.block.current).addScaledVector(item.normal, (BLOCK_SIZE / 2) * item.block.scale + 0.01);
+      item.line.visible = item.block.active;
+      item.line.position.copy(item.block.current).addScaledVector(item.normal, (BLOCK_SIZE / 2) * item.block.scale + 0.012);
       this.arrowYAxis.copy(item.direction).normalize();
       this.arrowZAxis.copy(item.normal).normalize();
       this.arrowXAxis.crossVectors(this.arrowYAxis, this.arrowZAxis).normalize();
       this.arrowMatrix.makeBasis(this.arrowXAxis, this.arrowYAxis, this.arrowZAxis);
-      item.mesh.quaternion.setFromRotationMatrix(this.arrowMatrix);
-      item.mesh.scale.setScalar(item.block.active ? item.block.scale : 0.001);
+      item.line.quaternion.setFromRotationMatrix(this.arrowMatrix);
+      item.line.scale.setScalar(item.block.active ? item.block.scale : 0.001);
     }
   }
 }
 
-function createArrowGeometry(): THREE.ShapeGeometry {
-  const shape = new THREE.Shape();
-  shape.moveTo(0, 0.31);
-  shape.lineTo(0.17, 0.08);
-  shape.lineTo(0.06, 0.08);
-  shape.lineTo(0.06, -0.31);
-  shape.lineTo(-0.06, -0.31);
-  shape.lineTo(-0.06, 0.08);
-  shape.lineTo(-0.17, 0.08);
-  shape.lineTo(0, 0.31);
-  return new THREE.ShapeGeometry(shape);
+function createArrowLineGeometry(): THREE.BufferGeometry {
+  return new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(0, -0.28, 0),
+    new THREE.Vector3(0, 0.22, 0),
+    new THREE.Vector3(0, 0.22, 0),
+    new THREE.Vector3(-0.14, 0.06, 0),
+    new THREE.Vector3(0, 0.22, 0),
+    new THREE.Vector3(0.14, 0.06, 0)
+  ]);
 }
 
 function dominantAxis(vector: THREE.Vector3): Position3 {
