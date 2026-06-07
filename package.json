@@ -2,7 +2,7 @@
   "name": "wechat-blocks",
   "version": "0.1.0",
   "private": true,
-  "description": "3D block elimination prototype for a WeChat Mini Game.",
+  "description": "和AI一起消方块 - 3D block elimination prototype for a WeChat Mini Game.",
   "scripts": {
     "dev": "webpack serve --config webpack.config.cjs --mode development",
     "build": "webpack --config webpack.config.cjs --mode production",

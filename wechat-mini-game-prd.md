@@ -1,4 +1,4 @@
-# 微信小游戏产品文档：3D 方块解谜（暂定名）
+# 微信小游戏产品文档：和AI一起消方块
 
 ## 1. 项目概述
 
@@ -190,7 +190,7 @@
 
 ```
 weixin-minigame-3d-block/
-├── game.config.json           # 小游戏配置
+├── game.json                  # 小游戏配置
 ├── project.config.json        # 项目配置
 ├── package.json
 ├── tsconfig.json

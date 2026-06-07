@@ -12,10 +12,10 @@ const FALLBACK_PALETTE = PALETTES[0]!;
 
 export function getLevelConfig(levelId: number): LevelConfig {
   const id = Math.max(1, Math.min(LEVEL_COUNT, levelId));
-  const size = id <= 2 ? 2 : id <= 7 ? 3 : 4;
+  const size = id <= 3 ? 4 : id <= 7 ? 5 : 6;
   const blockCount = size * size * size;
-  const bestGuess = Math.ceil(blockCount * (size === 2 ? 0.68 : size === 3 ? 0.54 : 0.46));
-  const maxMoves = bestGuess + 6 + Math.floor(id / 3);
+  const bestGuess = blockCount;
+  const maxMoves = blockCount + 8;
   const palette = PALETTES[(id - 1) % PALETTES.length] ?? FALLBACK_PALETTE;
 
   return {

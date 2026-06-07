@@ -3,7 +3,8 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>3D 方块解谜</title>
+    <title>和AI一起消方块</title>
+    <link rel="icon" type="image/png" href="assets/app-avatar.png" />
     <style>
       :root {
         color: #182024;
@@ -54,15 +55,47 @@
 
       .topbar,
       .toolbar,
-      .level-strip {
+      .level-strip,
+      .zoom-controls {
         pointer-events: auto;
       }
 
       .topbar {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-columns: minmax(128px, auto) minmax(0, 1fr) auto;
         gap: 10px;
         align-items: center;
+      }
+
+      .brand {
+        display: inline-grid;
+        min-width: 0;
+        height: 42px;
+        grid-template-columns: 32px minmax(0, auto);
+        gap: 8px;
+        align-items: center;
+        border: 1px solid rgba(24, 32, 36, 0.14);
+        border-radius: 8px;
+        padding: 4px 10px 4px 5px;
+        background: rgba(255, 255, 255, 0.78);
+        box-shadow: 0 8px 22px rgba(39, 57, 49, 0.1);
+        backdrop-filter: blur(12px);
+      }
+
+      .brand img {
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+      }
+
+      .brand span {
+        overflow: hidden;
+        color: #182024;
+        font-size: 0.88rem;
+        font-weight: 850;
+        line-height: 1;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
 
       .stats {
@@ -134,6 +167,21 @@
         width: 19px;
         height: 19px;
         stroke-width: 2.3;
+      }
+
+      .zoom-controls {
+        position: absolute;
+        right: 14px;
+        top: 50%;
+        display: grid;
+        gap: 8px;
+        transform: translateY(-50%);
+      }
+
+      .zoom-controls .icon-button {
+        width: 38px;
+        height: 38px;
+        background: rgba(255, 255, 255, 0.76);
       }
 
       .level-strip {
@@ -315,6 +363,20 @@
           padding-inline: 10px;
         }
 
+        .topbar {
+          grid-template-columns: minmax(0, 1fr) auto;
+        }
+
+        .brand {
+          grid-column: 1 / -1;
+          width: fit-content;
+          max-width: min(100%, 220px);
+        }
+
+        .zoom-controls {
+          right: 10px;
+        }
+
         .chip {
           min-width: 50px;
           padding-inline: 8px;
@@ -349,9 +411,13 @@
   </head>
   <body>
     <div id="app">
-      <canvas id="game-canvas" aria-label="3D 方块解谜"></canvas>
+      <canvas id="game-canvas" aria-label="和AI一起消方块"></canvas>
       <div class="hud" id="hud">
         <header class="topbar">
+          <div class="brand" aria-label="和AI一起消方块">
+            <img src="assets/app-avatar.png" alt="" />
+            <span>和AI一起消方块</span>
+          </div>
           <div class="stats" aria-live="polite">
             <span class="chip">关卡 <strong id="hud-level">1</strong></span>
             <span class="chip">步数 <strong id="hud-moves">0/0</strong></span>
@@ -381,6 +447,14 @@
             <span class="tool-copy"><b>自动</b><span id="hud-auto-state">关闭</span></span>
           </button>
         </footer>
+      </div>
+      <div class="zoom-controls" aria-label="缩放">
+        <button class="icon-button" id="hud-zoom-in" type="button" title="放大">
+          <i data-lucide="zoom-in"></i>
+        </button>
+        <button class="icon-button" id="hud-zoom-out" type="button" title="缩小">
+          <i data-lucide="zoom-out"></i>
+        </button>
       </div>
       <div class="toast" id="toast"></div>
       <section class="result" id="result">

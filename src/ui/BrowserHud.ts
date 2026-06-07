@@ -11,6 +11,8 @@ export class BrowserHud implements GameUi {
   private readonly undo = mustGet<HTMLButtonElement>("hud-undo");
   private readonly bomb = mustGet<HTMLButtonElement>("hud-bomb");
   private readonly auto = mustGet<HTMLButtonElement>("hud-auto");
+  private readonly zoomIn = mustGet<HTMLButtonElement>("hud-zoom-in");
+  private readonly zoomOut = mustGet<HTMLButtonElement>("hud-zoom-out");
   private readonly undoCount = mustGet<HTMLElement>("hud-undo-count");
   private readonly bombCount = mustGet<HTMLElement>("hud-bomb-count");
   private readonly autoState = mustGet<HTMLElement>("hud-auto-state");
@@ -33,6 +35,8 @@ export class BrowserHud implements GameUi {
     this.undo.addEventListener("click", () => handlers.onUndo());
     this.bomb.addEventListener("click", () => handlers.onBomb());
     this.auto.addEventListener("click", () => handlers.onAuto());
+    this.zoomIn.addEventListener("click", () => handlers.onZoomIn());
+    this.zoomOut.addEventListener("click", () => handlers.onZoomOut());
     this.resultRetry.addEventListener("click", () => handlers.onReset());
     this.resultNext.addEventListener("click", () => handlers.onNext());
     renderIcons();

@@ -4,6 +4,11 @@ export interface Position3 {
   z: number;
 }
 
+export interface FaceArrow {
+  normal: Position3;
+  direction: Position3;
+}
+
 export interface LevelConfig {
   id: number;
   name: string;
@@ -19,6 +24,7 @@ export interface BlockSnapshot {
   instanceId: number;
   grid: Position3;
   color: string;
+  faceArrows: FaceArrow[];
   active: boolean;
 }
 

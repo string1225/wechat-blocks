@@ -1,5 +1,11 @@
 import * as THREE from "three";
-import type { GridBlock } from "../world/CubeGrid";
+import type { Position3 } from "./types";
+import { BLOCK_COLOR, BLOCK_SIZE, type GridBlock } from "../world/CubeGrid";
+
+export interface PickResult {
+  instanceId: number;
+  faceNormal: Position3;
+}
 
 export class GameScene {
   readonly camera: THREE.PerspectiveCamera;
@@ -12,9 +18,41 @@ export class GameScene {
   private readonly rotation = new THREE.Quaternion();
   private readonly pointer = new THREE.Vector2();
   private readonly target = new THREE.Vector3();
+  private readonly arrowGeometry = createArrowGeometry();
+  private readonly arrowMaterial = new THREE.MeshBasicMaterial({
+    color: 0x10151a,
+    side: THREE.DoubleSide,
+    transparent: true,
+    opacity: 1,
+    depthTest: true,
+    depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -2
+  });
+  private readonly edgeGeometry = new THREE.EdgesGeometry(new THREE.BoxGeometry(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE));
+  private readonly edgeMaterial = new THREE.LineBasicMaterial({
+    color: 0x17341f,
+    transparent: true,
+    opacity: 0.88
+  });
+  private readonly arrowMatrix = new THREE.Matrix4();
+  private readonly arrowXAxis = new THREE.Vector3();
+  private readonly arrowYAxis = new THREE.Vector3();
+  private readonly arrowZAxis = new THREE.Vector3();
+  private arrowMeshes: Array<{
+    block: GridBlock;
+    direction: THREE.Vector3;
+    mesh: THREE.Mesh;
+    normal: THREE.Vector3;
+  }> = [];
+  private edgeLines: Array<{ block: GridBlock; line: THREE.LineSegments }> = [];
   private mesh: THREE.InstancedMesh | null = null;
   private theta = Math.PI * 0.22;
   private phi = Math.PI * 0.34;
+  private activeSize = 4;
+  private zoomFactor = 1;
+  private baseRadius = 7;
   private radius = 7;
   private minRadius = 4;
   private maxRadius = 14;
@@ -38,6 +76,8 @@ export class GameScene {
   }
 
   loadBlocks(blocks: readonly GridBlock[], size: number): void {
+    this.clearBlockOverlays();
+
     if (this.mesh) {
       this.scene.remove(this.mesh);
       this.mesh.geometry.dispose();
@@ -51,24 +91,23 @@ export class GameScene {
       this.mesh = null;
     }
 
-    const geometry = new THREE.BoxGeometry(0.92, 0.92, 0.92);
-    const material = new THREE.MeshStandardMaterial({
-      vertexColors: true,
-      roughness: 0.72,
-      metalness: 0.04
+    const geometry = new THREE.BoxGeometry(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+    const material = new THREE.MeshBasicMaterial({
+      color: blocks[0]?.color ?? BLOCK_COLOR
     });
 
     this.mesh = new THREE.InstancedMesh(geometry, material, Math.max(1, blocks.length));
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.mesh.castShadow = false;
     this.mesh.receiveShadow = false;
+    this.mesh.renderOrder = 1;
     this.scene.add(this.mesh);
+    this.createBlockOverlays(blocks);
 
-    this.target.set(0, ((size - 1) * 1.08) / 2, 0);
-    this.radius = THREE.MathUtils.clamp(size * 2.25 + 2.2, this.minRadius, this.maxRadius);
-    this.minRadius = Math.max(3.4, size * 1.55);
-    this.maxRadius = Math.max(8, size * 4.2);
-    this.updateCamera();
+    this.activeSize = size;
+    this.target.set(0, ((size - 1) * BLOCK_SIZE) / 2, 0);
+    this.zoomFactor = 1;
+    this.frameActiveBlocks();
     this.updateBlocks(blocks);
   }
 
@@ -81,16 +120,14 @@ export class GameScene {
       this.scale.setScalar(block.active ? block.scale : 0.001);
       this.matrix.compose(block.current, this.rotation, this.scale);
       this.mesh.setMatrixAt(block.instanceId, this.matrix);
-      this.mesh.setColorAt(block.instanceId, new THREE.Color(block.color));
     }
 
     this.mesh.instanceMatrix.needsUpdate = true;
-    if (this.mesh.instanceColor) {
-      this.mesh.instanceColor.needsUpdate = true;
-    }
+
+    this.updateBlockOverlays();
   }
 
-  pickInstance(clientX: number, clientY: number): number | null {
+  pickBlock(clientX: number, clientY: number): PickResult | null {
     if (!this.mesh) {
       return null;
     }
@@ -102,7 +139,14 @@ export class GameScene {
 
     const hits = this.raycaster.intersectObject(this.mesh, false);
     const hit = hits.find((item) => item.instanceId !== undefined);
-    return hit?.instanceId ?? null;
+    if (!hit || hit.instanceId === undefined || !hit.face) {
+      return null;
+    }
+
+    return {
+      instanceId: hit.instanceId,
+      faceNormal: dominantAxis(hit.face.normal)
+    };
   }
 
   rotate(deltaX: number, deltaY: number): void {
@@ -112,7 +156,8 @@ export class GameScene {
   }
 
   zoom(delta: number): void {
-    this.radius = THREE.MathUtils.clamp(this.radius * delta, this.minRadius, this.maxRadius);
+    this.zoomFactor = THREE.MathUtils.clamp(this.zoomFactor * delta, 0.55, 1.85);
+    this.radius = THREE.MathUtils.clamp(this.baseRadius * this.zoomFactor, this.minRadius, this.maxRadius);
     this.updateCamera();
   }
 
@@ -122,6 +167,7 @@ export class GameScene {
     this.renderer.setSize(width, height, false);
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
+    this.frameActiveBlocks(false);
   }
 
   render(): void {
@@ -174,8 +220,23 @@ export class GameScene {
     this.camera.lookAt(this.target);
   }
 
+  private frameActiveBlocks(resetZoom = true): void {
+    const fov = THREE.MathUtils.degToRad(this.camera.fov);
+    const aspect = Math.max(0.55, this.camera.aspect || 1);
+    const desiredWidthFill = 0.7;
+    const diagonalWidth = this.activeSize * BLOCK_SIZE * 1.38;
+    this.baseRadius = diagonalWidth / (2 * Math.tan(fov / 2) * aspect * desiredWidthFill);
+    this.minRadius = Math.max(2.2, this.baseRadius * 0.55);
+    this.maxRadius = Math.max(this.baseRadius * 2.2, this.minRadius + 1);
+    if (resetZoom) {
+      this.zoomFactor = 1;
+    }
+    this.radius = THREE.MathUtils.clamp(this.baseRadius * this.zoomFactor, this.minRadius, this.maxRadius);
+    this.updateCamera();
+  }
+
   private createLighting(): void {
-    const hemisphere = new THREE.HemisphereLight(0xffffff, 0x9fb2a6, 2.25);
+    const hemisphere = new THREE.HemisphereLight(0xffffff, 0x4c5a82, 2.2);
     this.scene.add(hemisphere);
 
     const key = new THREE.DirectionalLight(0xffffff, 2.8);
@@ -188,7 +249,10 @@ export class GameScene {
   }
 
   private createStage(): void {
-    const grid = new THREE.GridHelper(10, 12, 0x8aa59a, 0xc6d5ca);
+    this.scene.background = new THREE.Color(0x282d58);
+    this.renderer.setClearColor(0x282d58, 1);
+
+    const grid = new THREE.GridHelper(10, 12, 0x54609a, 0x39406d);
     grid.position.y = -0.56;
     const material = grid.material;
     if (Array.isArray(material)) {
@@ -198,7 +262,7 @@ export class GameScene {
       }
     } else {
       material.transparent = true;
-      material.opacity = 0.36;
+      material.opacity = 0.22;
     }
     this.scene.add(grid);
 
@@ -207,7 +271,7 @@ export class GameScene {
       new THREE.MeshBasicMaterial({
         color: 0xffffff,
         transparent: true,
-        opacity: 0.26,
+        opacity: 0.08,
         side: THREE.DoubleSide
       })
     );
@@ -215,4 +279,87 @@ export class GameScene {
     floor.position.y = -0.58;
     this.scene.add(floor);
   }
+
+  private createBlockOverlays(blocks: readonly GridBlock[]): void {
+    for (const block of blocks) {
+      const line = new THREE.LineSegments(this.edgeGeometry, this.edgeMaterial);
+      line.renderOrder = 2;
+      this.edgeLines.push({ block, line });
+      this.scene.add(line);
+
+      for (const arrow of block.faceArrows) {
+        const mesh = new THREE.Mesh(this.arrowGeometry, this.arrowMaterial);
+        mesh.renderOrder = 3;
+        this.arrowMeshes.push({
+          block,
+          direction: positionToVector(arrow.direction),
+          mesh,
+          normal: positionToVector(arrow.normal)
+        });
+        this.scene.add(mesh);
+      }
+    }
+  }
+
+  private clearBlockOverlays(): void {
+    for (const item of this.edgeLines) {
+      this.scene.remove(item.line);
+    }
+    this.edgeLines = [];
+
+    for (const item of this.arrowMeshes) {
+      this.scene.remove(item.mesh);
+    }
+    this.arrowMeshes = [];
+  }
+
+  private updateBlockOverlays(): void {
+    for (const item of this.edgeLines) {
+      item.line.visible = item.block.active;
+      item.line.position.copy(item.block.current);
+      item.line.scale.setScalar(item.block.active ? item.block.scale : 0.001);
+    }
+
+    for (const item of this.arrowMeshes) {
+      item.mesh.visible = item.block.active;
+      item.mesh.position.copy(item.block.current).addScaledVector(item.normal, (BLOCK_SIZE / 2) * item.block.scale + 0.01);
+      this.arrowYAxis.copy(item.direction).normalize();
+      this.arrowZAxis.copy(item.normal).normalize();
+      this.arrowXAxis.crossVectors(this.arrowYAxis, this.arrowZAxis).normalize();
+      this.arrowMatrix.makeBasis(this.arrowXAxis, this.arrowYAxis, this.arrowZAxis);
+      item.mesh.quaternion.setFromRotationMatrix(this.arrowMatrix);
+      item.mesh.scale.setScalar(item.block.active ? item.block.scale : 0.001);
+    }
+  }
+}
+
+function createArrowGeometry(): THREE.ShapeGeometry {
+  const shape = new THREE.Shape();
+  shape.moveTo(0, 0.31);
+  shape.lineTo(0.17, 0.08);
+  shape.lineTo(0.06, 0.08);
+  shape.lineTo(0.06, -0.31);
+  shape.lineTo(-0.06, -0.31);
+  shape.lineTo(-0.06, 0.08);
+  shape.lineTo(-0.17, 0.08);
+  shape.lineTo(0, 0.31);
+  return new THREE.ShapeGeometry(shape);
+}
+
+function dominantAxis(vector: THREE.Vector3): Position3 {
+  const absX = Math.abs(vector.x);
+  const absY = Math.abs(vector.y);
+  const absZ = Math.abs(vector.z);
+
+  if (absX >= absY && absX >= absZ) {
+    return { x: Math.sign(vector.x) || 1, y: 0, z: 0 };
+  }
+  if (absY >= absX && absY >= absZ) {
+    return { x: 0, y: Math.sign(vector.y) || 1, z: 0 };
+  }
+  return { x: 0, y: 0, z: Math.sign(vector.z) || 1 };
+}
+
+function positionToVector(position: Position3): THREE.Vector3 {
+  return new THREE.Vector3(position.x, position.y, position.z).normalize();
 }

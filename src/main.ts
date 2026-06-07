@@ -12,7 +12,9 @@ ui.bind({
   onLevel: (level) => game.loadLevel(level),
   onNext: () => game.nextLevel(),
   onReset: () => game.resetLevel(),
-  onUndo: () => game.undo()
+  onUndo: () => game.undo(),
+  onZoomIn: () => game.zoomIn(),
+  onZoomOut: () => game.zoomOut()
 });
 
 game.start();

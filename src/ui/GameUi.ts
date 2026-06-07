@@ -27,6 +27,8 @@ export interface UiHandlers {
   onNext: () => void;
   onReset: () => void;
   onUndo: () => void;
+  onZoomIn: () => void;
+  onZoomOut: () => void;
 }
 
 export interface GameUi {

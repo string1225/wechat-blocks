@@ -1,10 +1,10 @@
 import { LEVEL_COUNT, getLevelConfig } from "../data/levels";
-import { chooseBestCluster } from "../systems/solver";
+import { chooseBestBlock } from "../systems/solver";
 import type { GameUi, UiState } from "../ui/GameUi";
 import { CubeGrid, type GridBlock } from "../world/CubeGrid";
 import { GameScene } from "./GameScene";
 import { InputController } from "./InputController";
-import type { GamePhase, LevelConfig, PowerupState, TurnSnapshot } from "./types";
+import type { GamePhase, LevelConfig, Position3, PowerupState, TurnSnapshot } from "./types";
 
 export class Game {
   private readonly scene: GameScene;
@@ -65,7 +65,7 @@ export class Game {
 
   nextLevel(): void {
     if (this.level.id >= LEVEL_COUNT) {
-      this.ui.showToast("已到最后一关");
+      this.ui.showToast("Last level");
       return;
     }
 
@@ -86,7 +86,7 @@ export class Game {
     this.moves = snapshot.moves;
     this.grid.restore(snapshot.grid);
     this.scene.updateBlocks(this.grid.blocks);
-    this.ui.showToast("已撤销");
+    this.ui.showToast("Undo");
     this.updateUi();
   }
 
@@ -95,14 +95,17 @@ export class Game {
       return;
     }
 
-    const activeBlocks = this.grid.activeBlocks;
-    const target = activeBlocks[Math.floor(Math.random() * activeBlocks.length)];
+    const movableBlocks = this.grid.activeBlocks.filter((block) =>
+      block.faceArrows.some((arrow) => this.grid.canExit(block, arrow.direction))
+    );
+    const target = movableBlocks[Math.floor(Math.random() * movableBlocks.length)];
     if (!target) {
+      this.ui.showToast("Blocked");
       return;
     }
 
     this.powerups.bomb -= 1;
-    this.eliminate([target], "炸弹");
+    this.flyBlock(target, this.pickAutoDirection(target), "Bomb");
   }
 
   toggleAuto(): void {
@@ -112,8 +115,16 @@ export class Game {
 
     this.autoRunning = !this.autoRunning;
     this.autoCooldown = 0;
-    this.ui.showToast(this.autoRunning ? "自动运行" : "已暂停");
+    this.ui.showToast(this.autoRunning ? "Auto" : "Pause");
     this.updateUi();
+  }
+
+  zoomIn(): void {
+    this.scene.zoom(0.84);
+  }
+
+  zoomOut(): void {
+    this.scene.zoom(1.19);
   }
 
   private readonly tick = (time: number): void => {
@@ -140,38 +151,41 @@ export class Game {
       return;
     }
 
-    const instanceId = this.scene.pickInstance(clientX, clientY);
-    if (instanceId === null) {
+    const pick = this.scene.pickBlock(clientX, clientY);
+    if (!pick) {
       return;
     }
 
-    const block = this.grid.getBlockByInstanceId(instanceId);
+    const block = this.grid.getBlockByInstanceId(pick.instanceId);
     if (!block) {
       return;
     }
 
-    const cluster = this.grid.getCluster(block);
-    this.eliminate(cluster, "点击");
+    this.flyBlock(block, this.grid.getDirectionForFace(block, pick.faceNormal), "Fly");
   }
 
-  private eliminate(blocks: readonly GridBlock[], source: string): void {
-    if (blocks.length === 0 || this.phase !== "playing") {
-      return;
+  private flyBlock(block: GridBlock, direction: Position3, source: string): boolean {
+    if (this.phase !== "playing") {
+      return false;
     }
 
-    this.history.push({
+    const snapshot: TurnSnapshot = {
       grid: this.grid.snapshot(),
       moves: this.moves
-    });
-    this.history = this.history.slice(-30);
-    this.moves += 1;
+    };
 
-    const removed = this.grid.beginRemoval(blocks);
-    if (removed > 1) {
-      this.ui.showToast(`${source} x${removed}`);
+    if (!this.grid.beginFlight(block, direction)) {
+      return false;
     }
 
+    this.history.push(snapshot);
+    this.history = this.history.slice(-30);
+    this.moves += 1;
+    if (source !== "Fly") {
+      this.ui.showToast(source);
+    }
     this.updateUi();
+    return true;
   }
 
   private runAuto(dt: number): void {
@@ -188,15 +202,15 @@ export class Game {
       return;
     }
 
-    const cluster = chooseBestCluster(this.grid);
-    if (cluster.length === 0) {
+    const move = this.pickAutoMove();
+    if (!move) {
       this.autoRunning = false;
       this.updateUi();
       return;
     }
 
-    this.eliminate(cluster, "连消");
-    this.autoCooldown = 0.42;
+    this.flyBlock(move.block, move.direction, "Auto");
+    this.autoCooldown = 0.28;
   }
 
   private checkProgress(): void {
@@ -264,6 +278,33 @@ export class Game {
       return 1;
     }
     return 0;
+  }
+
+  private pickAutoDirection(block: GridBlock): Position3 {
+    const topArrow = block.faceArrows.find((arrow) => arrow.normal.y === 1);
+    return { ...(topArrow ?? block.faceArrows[0]!).direction };
+  }
+
+  private pickAutoMove(): { block: GridBlock; direction: Position3 } | null {
+    const preferred = chooseBestBlock(this.grid);
+    const orderedBlocks = preferred
+      ? [preferred, ...this.grid.activeBlocks.filter((block) => block !== preferred)]
+      : this.grid.activeBlocks;
+
+    for (const block of orderedBlocks) {
+      const preferredDirection = this.pickAutoDirection(block);
+      if (this.grid.canExit(block, preferredDirection)) {
+        return { block, direction: preferredDirection };
+      }
+
+      for (const arrow of block.faceArrows) {
+        if (this.grid.canExit(block, arrow.direction)) {
+          return { block, direction: { ...arrow.direction } };
+        }
+      }
+    }
+
+    return null;
   }
 
   private publishDebug(dt: number): void {
