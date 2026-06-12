@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import type { Position3 } from "./types";
-import { BLOCK_COLOR, BLOCK_SIZE, type GridBlock } from "../world/CubeGrid";
+import { BLOCK_COLOR, BLOCK_GAP, BLOCK_SIZE, type GridBlock } from "../world/CubeGrid";
 
 export interface PickResult {
   instanceId: number;
@@ -56,9 +56,9 @@ export class GameScene {
   });
   private readonly blankFaceGeometry = new THREE.PlaneGeometry(BLOCK_SIZE * 0.9, BLOCK_SIZE * 0.9);
   private readonly blankFaceMaterial = new THREE.MeshBasicMaterial({
-    color: 0x102717,
+    color: 0x6f756f,
     transparent: true,
-    opacity: 0.16,
+    opacity: 0.86,
     side: THREE.DoubleSide,
     depthTest: true,
     depthWrite: false,
@@ -146,7 +146,7 @@ export class GameScene {
     this.createBlockOverlays(blocks);
 
     this.activeSize = size;
-    this.target.set(0, ((size - 1) * BLOCK_SIZE) / 2, 0);
+    this.target.set(0, ((size - 1) * BLOCK_GAP) / 2, 0);
     this.zoomFactor = 1;
     this.frameActiveBlocks();
     this.updateBlocks(blocks);
@@ -264,8 +264,8 @@ export class GameScene {
   private frameActiveBlocks(resetZoom = true): void {
     const fov = THREE.MathUtils.degToRad(this.camera.fov);
     const aspect = Math.max(0.55, this.camera.aspect || 1);
-    const desiredWidthFill = 0.7;
-    const diagonalWidth = this.activeSize * BLOCK_SIZE * 1.38;
+    const desiredWidthFill = 0.45;
+    const diagonalWidth = this.activeSize * BLOCK_GAP * 1.38;
     this.baseRadius = diagonalWidth / (2 * Math.tan(fov / 2) * aspect * desiredWidthFill);
     this.minRadius = Math.max(2.2, this.baseRadius * 0.55);
     this.maxRadius = Math.max(this.baseRadius * 2.2, this.minRadius + 1);
@@ -328,6 +328,10 @@ export class GameScene {
 
     for (const block of blocks) {
       for (const normal of FACE_NORMALS) {
+        if (isRearFace(block, normal)) {
+          continue;
+        }
+
         this.faceBorderOverlays.push({
           block,
           index: this.faceBorderOverlays.length,
@@ -478,10 +482,15 @@ export class GameScene {
 }
 
 function createArrowStrokeGeometry(): THREE.BufferGeometry {
+  const tailY = -BLOCK_SIZE * 0.32;
+  const tipY = BLOCK_SIZE * 0.28;
+  const wingX = BLOCK_SIZE * 0.2;
+  const wingY = BLOCK_SIZE * 0.08;
+
   return createStrokeGeometry([
-    [new THREE.Vector2(0, -0.28), new THREE.Vector2(0, 0.22)],
-    [new THREE.Vector2(0, 0.22), new THREE.Vector2(-0.16, 0.06)],
-    [new THREE.Vector2(0, 0.22), new THREE.Vector2(0.16, 0.06)]
+    [new THREE.Vector2(0, tailY), new THREE.Vector2(0, tipY)],
+    [new THREE.Vector2(0, tipY), new THREE.Vector2(-wingX, wingY)],
+    [new THREE.Vector2(0, tipY), new THREE.Vector2(wingX, wingY)]
   ], ARROW_STROKE_WIDTH);
 }
 
@@ -531,7 +540,12 @@ function getBlankFaceNormals(block: GridBlock): Position3[] {
     return [];
   }
 
-  return FACE_NORMALS.filter((normal) => Math.abs(dot(normal, direction)) === 1);
+  return FACE_NORMALS.filter((normal) => dot(normal, direction) === -1);
+}
+
+function isRearFace(block: GridBlock, normal: Position3): boolean {
+  const direction = block.faceArrows[0]?.direction;
+  return direction ? dot(normal, direction) === -1 : false;
 }
 
 function isFaceExposed(

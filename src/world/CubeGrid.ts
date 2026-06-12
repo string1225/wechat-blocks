@@ -2,7 +2,8 @@ import * as THREE from "three";
 import type { FaceArrow, GridSnapshot, LevelConfig, Position3 } from "../game/types";
 import { createRng, pickOne } from "../systems/random";
 
-export const BLOCK_SIZE = 0.82;
+export const BLOCK_SIZE = 0.41;
+export const BLOCK_GAP = 0.82;
 export const BLOCK_COLOR = "#4dfc59";
 
 export interface GridBlock {
@@ -43,7 +44,7 @@ const FACE_NORMALS: readonly Position3[] = [
 ];
 
 export class CubeGrid {
-  readonly gap = BLOCK_SIZE;
+  readonly gap = BLOCK_GAP;
   readonly size: number;
   readonly blocks: GridBlock[];
 
@@ -68,13 +69,18 @@ export class CubeGrid {
     return block && block.active && !block.flying ? block : null;
   }
 
-  getDirectionForFace(block: GridBlock, normal: Position3): Position3 | null {
+  getDirectionForFace(block: GridBlock, normal: Position3): Position3 {
     const arrow = block.faceArrows.find((item) => sameDirection(item.normal, normal));
     if (arrow) {
       return { ...arrow.direction };
     }
 
-    return null;
+    const fallback = block.faceArrows[0];
+    if (!fallback) {
+      throw new Error(`Block ${block.id} has no flight direction.`);
+    }
+
+    return { ...fallback.direction };
   }
 
   beginFlight(block: GridBlock, direction: Position3): boolean {
