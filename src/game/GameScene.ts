@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import type { Position3 } from "./types";
-import { BLOCK_COLOR, BLOCK_GAP, BLOCK_SIZE, type GridBlock } from "../world/CubeGrid";
+import { BLOCK_COLOR, BLOCK_SIZE, type GridBlock } from "../world/CubeGrid";
 
 export interface PickResult {
   instanceId: number;
@@ -54,18 +54,6 @@ export class GameScene {
     polygonOffsetFactor: -1,
     polygonOffsetUnits: -1
   });
-  private readonly blankFaceGeometry = new THREE.PlaneGeometry(BLOCK_SIZE * 0.9, BLOCK_SIZE * 0.9);
-  private readonly blankFaceMaterial = new THREE.MeshBasicMaterial({
-    color: 0x6f756f,
-    transparent: true,
-    opacity: 0.86,
-    side: THREE.DoubleSide,
-    depthTest: true,
-    depthWrite: false,
-    polygonOffset: true,
-    polygonOffsetFactor: -1,
-    polygonOffsetUnits: -1
-  });
   private readonly arrowMatrix = new THREE.Matrix4();
   private readonly arrowXAxis = new THREE.Vector3();
   private readonly arrowYAxis = new THREE.Vector3();
@@ -84,10 +72,8 @@ export class GameScene {
     normal: THREE.Vector3;
   }> = [];
   private faceBorderOverlays: Array<{ block: GridBlock; index: number; normal: Position3 }> = [];
-  private blankFaceOverlays: Array<{ block: GridBlock; index: number; normal: Position3 }> = [];
   private arrowMesh: THREE.InstancedMesh | null = null;
   private faceBorderMesh: THREE.InstancedMesh | null = null;
-  private blankFaceMesh: THREE.InstancedMesh | null = null;
   private mesh: THREE.InstancedMesh | null = null;
   private theta = Math.PI * 0.22;
   private phi = Math.PI * 0.34;
@@ -146,7 +132,7 @@ export class GameScene {
     this.createBlockOverlays(blocks);
 
     this.activeSize = size;
-    this.target.set(0, ((size - 1) * BLOCK_GAP) / 2, 0);
+    this.target.set(0, ((size - 1) * BLOCK_SIZE) / 2, 0);
     this.zoomFactor = 1;
     this.frameActiveBlocks();
     this.updateBlocks(blocks);
@@ -264,8 +250,8 @@ export class GameScene {
   private frameActiveBlocks(resetZoom = true): void {
     const fov = THREE.MathUtils.degToRad(this.camera.fov);
     const aspect = Math.max(0.55, this.camera.aspect || 1);
-    const desiredWidthFill = 0.45;
-    const diagonalWidth = this.activeSize * BLOCK_GAP * 1.38;
+    const desiredWidthFill = 0.35;
+    const diagonalWidth = this.activeSize * BLOCK_SIZE * 1.38;
     this.baseRadius = diagonalWidth / (2 * Math.tan(fov / 2) * aspect * desiredWidthFill);
     this.minRadius = Math.max(2.2, this.baseRadius * 0.55);
     this.maxRadius = Math.max(this.baseRadius * 2.2, this.minRadius + 1);
@@ -324,25 +310,12 @@ export class GameScene {
   private createBlockOverlays(blocks: readonly GridBlock[]): void {
     this.arrowOverlays = [];
     this.faceBorderOverlays = [];
-    this.blankFaceOverlays = [];
 
     for (const block of blocks) {
       for (const normal of FACE_NORMALS) {
-        if (isRearFace(block, normal)) {
-          continue;
-        }
-
         this.faceBorderOverlays.push({
           block,
           index: this.faceBorderOverlays.length,
-          normal
-        });
-      }
-
-      for (const normal of getBlankFaceNormals(block)) {
-        this.blankFaceOverlays.push({
-          block,
-          index: this.blankFaceOverlays.length,
           normal
         });
       }
@@ -366,15 +339,6 @@ export class GameScene {
     this.faceBorderMesh.renderOrder = 2;
     this.scene.add(this.faceBorderMesh);
 
-    this.blankFaceMesh = new THREE.InstancedMesh(
-      this.blankFaceGeometry,
-      this.blankFaceMaterial,
-      Math.max(1, this.blankFaceOverlays.length)
-    );
-    this.blankFaceMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    this.blankFaceMesh.renderOrder = 2;
-    this.scene.add(this.blankFaceMesh);
-
     this.arrowMesh = new THREE.InstancedMesh(
       this.arrowGeometry,
       this.arrowMaterial,
@@ -392,12 +356,6 @@ export class GameScene {
       this.faceBorderMesh = null;
     }
 
-    if (this.blankFaceMesh) {
-      this.scene.remove(this.blankFaceMesh);
-      this.blankFaceMesh.dispose();
-      this.blankFaceMesh = null;
-    }
-
     if (this.arrowMesh) {
       this.scene.remove(this.arrowMesh);
       this.arrowMesh.dispose();
@@ -405,7 +363,6 @@ export class GameScene {
     }
 
     this.faceBorderOverlays = [];
-    this.blankFaceOverlays = [];
     this.arrowOverlays = [];
   }
 
@@ -420,14 +377,6 @@ export class GameScene {
         this.setFaceOverlayMatrix(this.faceBorderMesh, item.index, item.block, item.normal, visible, FACE_OFFSET);
       }
       this.faceBorderMesh.instanceMatrix.needsUpdate = true;
-    }
-
-    if (this.blankFaceMesh) {
-      for (const item of this.blankFaceOverlays) {
-        const visible = item.block.active && isFaceExposed(item.block, item.normal, occupied, this.activeSize);
-        this.setFaceOverlayMatrix(this.blankFaceMesh, item.index, item.block, item.normal, visible, FACE_OFFSET * 1.2);
-      }
-      this.blankFaceMesh.instanceMatrix.needsUpdate = true;
     }
 
     if (this.arrowMesh) {
@@ -534,20 +483,6 @@ function createStrokeGeometry(segments: Array<[THREE.Vector2, THREE.Vector2]>, w
   return geometry;
 }
 
-function getBlankFaceNormals(block: GridBlock): Position3[] {
-  const direction = block.faceArrows[0]?.direction;
-  if (!direction) {
-    return [];
-  }
-
-  return FACE_NORMALS.filter((normal) => dot(normal, direction) === -1);
-}
-
-function isRearFace(block: GridBlock, normal: Position3): boolean {
-  const direction = block.faceArrows[0]?.direction;
-  return direction ? dot(normal, direction) === -1 : false;
-}
-
 function isFaceExposed(
   block: GridBlock,
   normal: Position3,
@@ -583,10 +518,6 @@ function isInsidePosition(position: Position3, size: number): boolean {
     position.z >= 0 &&
     position.z < size
   );
-}
-
-function dot(a: Position3, b: Position3): number {
-  return a.x * b.x + a.y * b.y + a.z * b.z;
 }
 
 function vectorToPosition(vector: THREE.Vector3): Position3 {

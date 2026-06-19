@@ -18,7 +18,7 @@ require.extensions[".ts"] = (module, filename) => {
   );
 };
 
-const { BLOCK_GAP, BLOCK_SIZE, CubeGrid } = require("../src/world/CubeGrid.ts");
+const { BLOCK_SIZE, CubeGrid } = require("../src/world/CubeGrid.ts");
 
 const FACE_NORMALS = [
   { x: 1, y: 0, z: 0 },
@@ -29,13 +29,11 @@ const FACE_NORMALS = [
   { x: 0, y: 0, z: -1 }
 ];
 
-test("uses half-sized blocks on the original grid spacing", () => {
+test("uses block-sized grid spacing so adjacent blocks touch", () => {
   const grid = createGrid();
 
-  assert.equal(BLOCK_SIZE, 0.41);
-  assert.equal(BLOCK_GAP, 0.82);
-  assert.equal(grid.gap, BLOCK_GAP);
-  assert.equal(grid.gap, BLOCK_SIZE * 2);
+  assert.equal(BLOCK_SIZE, 0.82);
+  assert.equal(grid.gap, BLOCK_SIZE);
 });
 
 test("all six faces click toward the block flight direction", () => {

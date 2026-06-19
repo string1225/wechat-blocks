@@ -2,8 +2,7 @@ import * as THREE from "three";
 import type { FaceArrow, GridSnapshot, LevelConfig, Position3 } from "../game/types";
 import { createRng, pickOne } from "../systems/random";
 
-export const BLOCK_SIZE = 0.41;
-export const BLOCK_GAP = 0.82;
+export const BLOCK_SIZE = 0.82;
 export const BLOCK_COLOR = "#4dfc59";
 
 export interface GridBlock {
@@ -44,7 +43,7 @@ const FACE_NORMALS: readonly Position3[] = [
 ];
 
 export class CubeGrid {
-  readonly gap = BLOCK_GAP;
+  readonly gap = BLOCK_SIZE;
   readonly size: number;
   readonly blocks: GridBlock[];
 
