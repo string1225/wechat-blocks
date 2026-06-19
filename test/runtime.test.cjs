@@ -22,6 +22,7 @@ function runMain(globals) {
   const observed = {
     browserHudCreated: false,
     canvas: null,
+    gameOptions: undefined,
     noopHudCreated: false,
     started: false
   };
@@ -46,8 +47,9 @@ function createRequireStub(observed) {
     if (request === "./game/Game") {
       return {
         Game: class FakeGame {
-          constructor(canvas) {
+          constructor(canvas, _ui, options) {
             observed.canvas = canvas;
+            observed.gameOptions = options;
           }
 
           loadLevel() {}
@@ -112,6 +114,7 @@ test("uses wx canvas when WeChat provides a non-DOM document shim", () => {
   assert.equal(observed.canvas, wxCanvas);
   assert.equal(observed.noopHudCreated, true);
   assert.equal(observed.browserHudCreated, false);
+  assert.equal(observed.gameOptions.sceneHud, true);
   assert.equal(observed.started, true);
 });
 
@@ -149,6 +152,11 @@ test("adapts wx canvas to the DOM event APIs expected by Three.js", () => {
   assert.equal(rect.width, 320);
   assert.equal(rect.height, 640);
 
+  observed.canvas.width = 960;
+  observed.canvas.height = 1920;
+  assert.equal(observed.canvas.clientWidth, 320);
+  assert.equal(observed.canvas.clientHeight, 640);
+
   let receivedPointer = null;
   observed.canvas.addEventListener("pointerdown", (event) => {
     receivedPointer = event;
@@ -182,5 +190,6 @@ test("uses the browser canvas when a real DOM document is available", () => {
   assert.equal(observed.canvas, browserCanvas);
   assert.equal(observed.browserHudCreated, true);
   assert.equal(observed.noopHudCreated, false);
+  assert.equal(observed.gameOptions.sceneHud, false);
   assert.equal(observed.started, true);
 });

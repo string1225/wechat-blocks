@@ -1,10 +1,30 @@
 import * as THREE from "three";
 import type { Position3 } from "./types";
+import { getDevicePixelRatio, getHudInsets } from "../platform/display";
+import type { UiState } from "../ui/GameUi";
 import { BLOCK_COLOR, BLOCK_SIZE, type GridBlock } from "../world/CubeGrid";
 
 export interface PickResult {
   instanceId: number;
   faceNormal: Position3;
+}
+
+export interface GameSceneOptions {
+  sceneHud?: boolean;
+}
+
+type SceneHudAction = "auto" | "bomb" | "levelNext" | "levelPrev" | "reset" | "undo";
+
+interface HudButton {
+  action?: SceneHudAction;
+  disabled?: boolean;
+  emphasis?: boolean;
+  height: number;
+  label: string;
+  secondary?: string;
+  width: number;
+  x: number;
+  y: number;
 }
 
 const ARROW_STROKE_WIDTH = 0.036;
@@ -24,6 +44,8 @@ export class GameScene {
 
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene = new THREE.Scene();
+  private readonly hudScene = new THREE.Scene();
+  private readonly hudCamera = new THREE.OrthographicCamera(0, 1, 1, 0, -10, 10);
   private readonly raycaster = new THREE.Raycaster();
   private readonly matrix = new THREE.Matrix4();
   private readonly scale = new THREE.Vector3();
@@ -65,6 +87,7 @@ export class GameScene {
   private readonly overlayPosition = new THREE.Vector3();
   private readonly overlayScale = new THREE.Vector3();
   private readonly overlayQuaternion = new THREE.Quaternion();
+  private readonly sceneHud: boolean;
   private arrowOverlays: Array<{
     block: GridBlock;
     direction: THREE.Vector3;
@@ -72,6 +95,10 @@ export class GameScene {
     normal: THREE.Vector3;
   }> = [];
   private faceBorderOverlays: Array<{ block: GridBlock; index: number; normal: Position3 }> = [];
+  private hudButtons: HudButton[] = [];
+  private hudKey = "";
+  private hudMeshes: THREE.Mesh[] = [];
+  private hudState: UiState | null = null;
   private arrowMesh: THREE.InstancedMesh | null = null;
   private faceBorderMesh: THREE.InstancedMesh | null = null;
   private mesh: THREE.InstancedMesh | null = null;
@@ -84,14 +111,16 @@ export class GameScene {
   private minRadius = 4;
   private maxRadius = 14;
 
-  constructor(private readonly canvas: HTMLCanvasElement) {
+  constructor(private readonly canvas: HTMLCanvasElement, options: GameSceneOptions = {}) {
+    this.sceneHud = options.sceneHud ?? false;
+    this.hudCamera.position.z = 10;
     this.renderer = new THREE.WebGLRenderer({
       canvas,
       antialias: true,
       alpha: false,
       powerPreference: "high-performance"
     });
-    this.renderer.setPixelRatio(Math.min(globalThis.devicePixelRatio || 1, 2));
+    this.renderer.setPixelRatio(getDevicePixelRatio());
     this.renderer.setClearColor(0xeef4ef, 1);
 
     this.camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
@@ -100,6 +129,15 @@ export class GameScene {
     this.createLighting();
     this.createStage();
     this.resize();
+  }
+
+  setHudState(state: UiState): void {
+    if (!this.sceneHud) {
+      return;
+    }
+
+    this.hudState = state;
+    this.hudKey = "";
   }
 
   loadBlocks(blocks: readonly GridBlock[], size: number): void {
@@ -176,6 +214,27 @@ export class GameScene {
     };
   }
 
+  pickHudAction(clientX: number, clientY: number): SceneHudAction | null {
+    if (!this.sceneHud) {
+      return null;
+    }
+
+    const rect = this.canvas.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+    const button = this.hudButtons.find(
+      (item) =>
+        item.action &&
+        !item.disabled &&
+        x >= item.x &&
+        x <= item.x + item.width &&
+        y >= item.y &&
+        y <= item.y + item.height
+    );
+
+    return button?.action ?? null;
+  }
+
   rotate(deltaX: number, deltaY: number): void {
     this.theta -= deltaX * 0.006;
     this.phi = THREE.MathUtils.clamp(this.phi - deltaY * 0.005, 0.22, Math.PI * 0.48);
@@ -194,11 +253,18 @@ export class GameScene {
     this.renderer.setSize(width, height, false);
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
+    this.updateHudCamera(width, height);
+    this.hudKey = "";
     this.frameActiveBlocks(false);
   }
 
   render(): void {
     this.renderer.render(this.scene, this.camera);
+    if (this.sceneHud && this.hudState) {
+      this.updateHud();
+      this.renderer.clearDepth();
+      this.renderer.render(this.hudScene, this.hudCamera);
+    }
   }
 
   samplePixels(): { height: number; nonBackground: number; uniqueColors: number; width: number } {
@@ -245,6 +311,81 @@ export class GameScene {
       this.target.z + this.radius * sinPhi * Math.cos(this.theta)
     );
     this.camera.lookAt(this.target);
+  }
+
+  private updateHud(): void {
+    if (!this.hudState) {
+      return;
+    }
+
+    const width = this.canvas.clientWidth || globalThis.innerWidth || 1;
+    const height = this.canvas.clientHeight || globalThis.innerHeight || 1;
+    const state = this.hudState;
+    const key = [
+      width,
+      height,
+      state.autoRunning,
+      state.canUndo,
+      state.level,
+      state.levelCount,
+      state.phase,
+      state.powerups.bomb,
+      state.powerups.undo,
+      state.remaining,
+      state.stars
+    ].join(":");
+
+    if (key === this.hudKey) {
+      return;
+    }
+
+    this.hudKey = key;
+    this.hudButtons = createHudButtons(width, height, state);
+    this.rebuildHudMeshes();
+  }
+
+  private updateHudCamera(width: number, height: number): void {
+    this.hudCamera.left = 0;
+    this.hudCamera.right = width;
+    this.hudCamera.top = 0;
+    this.hudCamera.bottom = height;
+    this.hudCamera.updateProjectionMatrix();
+  }
+
+  private rebuildHudMeshes(): void {
+    for (const mesh of this.hudMeshes) {
+      this.hudScene.remove(mesh);
+      mesh.geometry.dispose();
+      const material = mesh.material;
+      if (Array.isArray(material)) {
+        for (const item of material) {
+          item.dispose();
+        }
+      } else {
+        if ("map" in material && material.map instanceof THREE.Texture) {
+          material.map.dispose();
+        }
+        material.dispose();
+      }
+    }
+
+    this.hudMeshes = [];
+
+    for (const button of this.hudButtons) {
+      const texture = createHudTexture(button);
+      const geometry = new THREE.PlaneGeometry(button.width, button.height);
+      const material = new THREE.MeshBasicMaterial({
+        depthTest: false,
+        depthWrite: false,
+        map: texture,
+        transparent: true
+      });
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.position.set(button.x + button.width / 2, button.y + button.height / 2, 0);
+      mesh.renderOrder = 10;
+      this.hudScene.add(mesh);
+      this.hudMeshes.push(mesh);
+    }
   }
 
   private frameActiveBlocks(resetZoom = true): void {
@@ -428,6 +569,189 @@ export class GameScene {
     this.matrix.compose(this.overlayPosition, this.overlayQuaternion, this.overlayScale);
     mesh.setMatrixAt(index, this.matrix);
   }
+}
+
+function createHudButtons(width: number, height: number, state: UiState): HudButton[] {
+  const gap = 8;
+  const margin = 14;
+  const insets = getHudInsets();
+  const topY = Math.min(Math.max(insets.top, 14), Math.max(14, height - 130));
+  const topHeight = 36;
+  const topButtons: HudButton[] = [
+    {
+      action: "levelPrev",
+      disabled: state.level <= 1,
+      height: topHeight,
+      label: "<",
+      width: 34,
+      x: margin,
+      y: topY
+    },
+    {
+      emphasis: true,
+      height: topHeight,
+      label: `难度 ${state.level}`,
+      width: 78,
+      x: margin + 34 + gap,
+      y: topY
+    },
+    {
+      action: "levelNext",
+      disabled: state.level >= state.levelCount,
+      height: topHeight,
+      label: ">",
+      width: 34,
+      x: margin + 34 + gap + 78 + gap,
+      y: topY
+    },
+    {
+      height: topHeight,
+      label: `剩余 ${state.remaining}`,
+      width: 74,
+      x: margin + 34 + gap + 78 + gap + 34 + gap,
+      y: topY
+    },
+    {
+      height: topHeight,
+      label: renderHudStars(state.stars),
+      width: 56,
+      x: margin + 34 + gap + 78 + gap + 34 + gap + 74 + gap,
+      y: topY
+    }
+  ];
+
+  const bottomHeight = 46;
+  const toolbarWidth = Math.min(width - margin * 2, 440);
+  const buttonWidth = Math.floor((toolbarWidth - gap * 3) / 4);
+  const bottomY = Math.max(topY + topHeight + 14, height - insets.bottom - bottomHeight);
+  const startX = Math.max(margin, (width - toolbarWidth) / 2);
+  const bottomButtons: HudButton[] = [
+    {
+      action: "reset",
+      height: bottomHeight,
+      label: "重置",
+      secondary: "不限",
+      width: buttonWidth,
+      x: startX,
+      y: bottomY
+    },
+    {
+      action: "undo",
+      disabled: !state.canUndo || state.phase !== "playing",
+      height: bottomHeight,
+      label: "撤销",
+      secondary: String(state.powerups.undo),
+      width: buttonWidth,
+      x: startX + (buttonWidth + gap),
+      y: bottomY
+    },
+    {
+      action: "bomb",
+      disabled: state.powerups.bomb <= 0 || state.remaining <= 0 || state.phase !== "playing",
+      height: bottomHeight,
+      label: "炸弹",
+      secondary: String(state.powerups.bomb),
+      width: buttonWidth,
+      x: startX + (buttonWidth + gap) * 2,
+      y: bottomY
+    },
+    {
+      action: "auto",
+      disabled: state.remaining <= 0 || state.phase !== "playing",
+      height: bottomHeight,
+      label: "自动",
+      secondary: state.autoRunning ? "开" : "关",
+      width: buttonWidth,
+      x: startX + (buttonWidth + gap) * 3,
+      y: bottomY
+    }
+  ];
+
+  const lastTopButton = topButtons[topButtons.length - 1]!;
+  const topFits = lastTopButton.x + lastTopButton.width <= width - margin;
+  return topFits ? [...topButtons, ...bottomButtons] : [topButtons[0]!, topButtons[1]!, topButtons[2]!, ...bottomButtons];
+}
+
+function createHudTexture(button: HudButton): THREE.CanvasTexture {
+  const ratio = getDevicePixelRatio();
+  const canvas = createHudCanvas();
+  canvas.width = Math.max(1, Math.round(button.width * ratio));
+  canvas.height = Math.max(1, Math.round(button.height * ratio));
+
+  const context = canvas.getContext("2d");
+  if (!context) {
+    throw new Error("Unable to create HUD texture context.");
+  }
+
+  context.scale(ratio, ratio);
+  context.clearRect(0, 0, button.width, button.height);
+  drawRoundedRect(context, 0, 0, button.width, button.height, 9);
+  context.fillStyle = button.disabled
+    ? "rgba(225, 228, 238, 0.54)"
+    : button.emphasis
+      ? "rgba(246, 247, 252, 0.96)"
+      : "rgba(241, 243, 248, 0.9)";
+  context.fill();
+  context.strokeStyle = button.emphasis ? "rgba(25, 31, 38, 0.18)" : "rgba(25, 31, 38, 0.1)";
+  context.lineWidth = 1;
+  context.stroke();
+
+  context.fillStyle = button.disabled ? "rgba(22, 29, 36, 0.42)" : "#101820";
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  if (button.secondary) {
+    context.font = "700 14px sans-serif";
+    context.fillText(button.label, button.width / 2, button.height * 0.38);
+    context.font = "600 10px sans-serif";
+    context.fillText(button.secondary, button.width / 2, button.height * 0.72);
+  } else {
+    context.font = button.label.length <= 1 ? "800 20px sans-serif" : "800 13px sans-serif";
+    context.fillText(button.label, button.width / 2, button.height / 2 + 1);
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.needsUpdate = true;
+  return texture;
+}
+
+function createHudCanvas(): HTMLCanvasElement {
+  if (typeof document !== "undefined" && typeof document.createElement === "function") {
+    return document.createElement("canvas");
+  }
+
+  const canvas = typeof wx !== "undefined" ? wx?.createCanvas?.() : undefined;
+  if (!canvas) {
+    throw new Error("No canvas available for HUD texture.");
+  }
+
+  return canvas;
+}
+
+function drawRoundedRect(
+  context: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number
+): void {
+  const r = Math.min(radius, width / 2, height / 2);
+  context.beginPath();
+  context.moveTo(x + r, y);
+  context.lineTo(x + width - r, y);
+  context.quadraticCurveTo(x + width, y, x + width, y + r);
+  context.lineTo(x + width, y + height - r);
+  context.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+  context.lineTo(x + r, y + height);
+  context.quadraticCurveTo(x, y + height, x, y + height - r);
+  context.lineTo(x, y + r);
+  context.quadraticCurveTo(x, y, x + r, y);
+  context.closePath();
+}
+
+function renderHudStars(stars: number): string {
+  return `${"★".repeat(stars)}${"☆".repeat(3 - stars)}`;
 }
 
 function createArrowStrokeGeometry(): THREE.BufferGeometry {

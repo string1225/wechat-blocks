@@ -1,7 +1,8 @@
 declare const wx:
   | {
       createCanvas?: () => HTMLCanvasElement;
-      getSystemInfoSync?: () => { windowWidth: number; windowHeight: number };
+      getMenuButtonBoundingClientRect?: () => WechatMenuButtonRect;
+      getSystemInfoSync?: () => WechatSystemInfo;
       onTouchCancel?: (handler: (event: WechatTouchEvent) => void) => void;
       onTouchEnd?: (handler: (event: WechatTouchEvent) => void) => void;
       onTouchMove?: (handler: (event: WechatTouchEvent) => void) => void;
@@ -22,4 +23,30 @@ interface WechatTouch {
   pageY?: number;
   x?: number;
   y?: number;
+}
+
+interface WechatMenuButtonRect {
+  bottom: number;
+  height: number;
+  left: number;
+  right: number;
+  top: number;
+  width: number;
+}
+
+interface WechatSafeArea {
+  bottom: number;
+  height: number;
+  left: number;
+  right: number;
+  top: number;
+  width: number;
+}
+
+interface WechatSystemInfo {
+  pixelRatio?: number;
+  safeArea?: WechatSafeArea;
+  statusBarHeight?: number;
+  windowHeight: number;
+  windowWidth: number;
 }

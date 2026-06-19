@@ -4,8 +4,8 @@ import { BrowserHud } from "./ui/BrowserHud";
 import type { GameUi } from "./ui/GameUi";
 import { NoopHud } from "./ui/NoopHud";
 
-const { canvas, ui } = createRuntime();
-const game = new Game(canvas, ui);
+const { canvas, sceneHud, ui } = createRuntime();
+const game = new Game(canvas, ui, { sceneHud });
 
 ui.bind({
   onAuto: () => game.toggleAuto(),
@@ -20,7 +20,7 @@ ui.bind({
 
 game.start();
 
-function createRuntime(): { canvas: HTMLCanvasElement; ui: GameUi } {
+function createRuntime(): { canvas: HTMLCanvasElement; sceneHud: boolean; ui: GameUi } {
   if (hasBrowserCanvasDocument()) {
     const canvas = document.getElementById("game-canvas");
     if (!(canvas instanceof HTMLCanvasElement)) {
@@ -29,6 +29,7 @@ function createRuntime(): { canvas: HTMLCanvasElement; ui: GameUi } {
 
     return {
       canvas,
+      sceneHud: false,
       ui: new BrowserHud()
     };
   }
@@ -41,6 +42,7 @@ function createRuntime(): { canvas: HTMLCanvasElement; ui: GameUi } {
 
   return {
     canvas: prepareWechatCanvas(canvas, maybeWx),
+    sceneHud: true,
     ui: new NoopHud()
   };
 }
@@ -91,8 +93,8 @@ function prepareWechatCanvas(canvas: HTMLCanvasElement, wxRuntime: WechatRuntime
   const target = canvas as unknown as WechatCanvas;
   const attributes = new Map<string, string>();
   const systemInfo = wxRuntime.getSystemInfoSync?.();
-  const width = Math.max(1, target.width || systemInfo?.windowWidth || globalThis.innerWidth || 1);
-  const height = Math.max(1, target.height || systemInfo?.windowHeight || globalThis.innerHeight || 1);
+  const width = Math.max(1, systemInfo?.windowWidth || target.width || globalThis.innerWidth || 1);
+  const height = Math.max(1, systemInfo?.windowHeight || target.height || globalThis.innerHeight || 1);
 
   target.width = target.width || width;
   target.height = target.height || height;
@@ -103,8 +105,8 @@ function prepareWechatCanvas(canvas: HTMLCanvasElement, wxRuntime: WechatRuntime
   target.getAttribute ??= (name) => attributes.get(name) ?? null;
   target.setPointerCapture ??= () => {};
   target.releasePointerCapture ??= () => {};
-  defineNumberGetter(target, "clientWidth", () => target.width || width);
-  defineNumberGetter(target, "clientHeight", () => target.height || height);
+  defineNumberGetter(target, "clientWidth", () => width);
+  defineNumberGetter(target, "clientHeight", () => height);
   target.getBoundingClientRect ??= () => {
     const rectWidth = target.clientWidth || width;
     const rectHeight = target.clientHeight || height;

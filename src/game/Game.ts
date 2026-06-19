@@ -9,6 +9,10 @@ import type { GamePhase, LevelConfig, Position3, PowerupState, TurnSnapshot } fr
 
 type FlightSource = "Fly" | "Bomb" | "Silent";
 
+export interface GameOptions {
+  sceneHud?: boolean;
+}
+
 export class Game {
   private readonly scene: GameScene;
   private readonly input: InputController;
@@ -26,9 +30,10 @@ export class Game {
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
-    private readonly ui: GameUi
+    private readonly ui: GameUi,
+    options: GameOptions = {}
   ) {
-    this.scene = new GameScene(canvas);
+    this.scene = new GameScene(canvas, { sceneHud: options.sceneHud ?? false });
     this.input = new InputController(canvas, {
       onTap: (clientX, clientY) => this.handleTap(clientX, clientY),
       onRotate: (deltaX, deltaY) => this.scene.rotate(deltaX, deltaY),
@@ -149,6 +154,12 @@ export class Game {
   };
 
   private handleTap(clientX: number, clientY: number): void {
+    const hudAction = this.scene.pickHudAction(clientX, clientY);
+    if (hudAction) {
+      this.handleHudAction(hudAction);
+      return;
+    }
+
     if (this.phase !== "playing" || this.grid.isAnimating()) {
       return;
     }
@@ -191,6 +202,29 @@ export class Game {
     }
     this.updateUi();
     return true;
+  }
+
+  private handleHudAction(action: string): void {
+    switch (action) {
+      case "auto":
+        this.toggleAuto();
+        return;
+      case "bomb":
+        this.useBomb();
+        return;
+      case "levelNext":
+        this.nextLevel();
+        return;
+      case "levelPrev":
+        this.loadLevel(Math.max(1, this.level.id - 1));
+        return;
+      case "reset":
+        this.resetLevel();
+        return;
+      case "undo":
+        this.undo();
+        return;
+    }
   }
 
   private runAuto(dt: number): void {
@@ -265,6 +299,7 @@ export class Game {
       stars: this.calculateStars()
     };
     this.ui.update(state);
+    this.scene.setHudState(state);
   }
 
   private calculateStars(): number {
