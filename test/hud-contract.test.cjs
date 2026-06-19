@@ -18,6 +18,13 @@ test("top hud uses a compact difficulty stepper instead of a level list", () => 
   assert.equal(indexSource.includes("关卡"), false);
 });
 
+test("top hud does not show the move counter", () => {
+  assert.equal(indexSource.includes('id="hud-moves"'), false);
+  assert.equal(indexSource.includes("步数"), false);
+  assert.equal(browserHudSource.includes("hud-moves"), false);
+  assert.equal(browserHudSource.includes("moves.textContent"), false);
+});
+
 test("difficulty arrows load the previous and next difficulty", () => {
   assert.match(browserHudSource, /hud-difficulty-prev/);
   assert.match(browserHudSource, /hud-difficulty-next/);

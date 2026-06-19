@@ -5,7 +5,6 @@ export class BrowserHud implements GameUi {
   private readonly difficulty = mustGet<HTMLElement>("hud-difficulty");
   private readonly difficultyPrev = mustGet<HTMLButtonElement>("hud-difficulty-prev");
   private readonly difficultyNext = mustGet<HTMLButtonElement>("hud-difficulty-next");
-  private readonly moves = mustGet<HTMLElement>("hud-moves");
   private readonly left = mustGet<HTMLElement>("hud-left");
   private readonly stars = mustGet<HTMLElement>("hud-stars");
   private readonly reset = mustGet<HTMLButtonElement>("hud-reset");
@@ -56,7 +55,6 @@ export class BrowserHud implements GameUi {
     this.currentLevelCount = state.levelCount;
 
     this.difficulty.textContent = String(state.level);
-    this.moves.textContent = `${state.moves}/${state.maxMoves}`;
     this.left.textContent = String(state.remaining);
     this.stars.textContent = renderStars(state.stars);
     this.undoCount.textContent = String(state.powerups.undo);
