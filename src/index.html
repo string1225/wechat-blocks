@@ -55,14 +55,14 @@
 
       .topbar,
       .toolbar,
-      .level-strip,
+      .difficulty-stepper,
       .zoom-controls {
         pointer-events: auto;
       }
 
       .topbar {
         display: grid;
-        grid-template-columns: minmax(128px, auto) minmax(0, 1fr) auto;
+        grid-template-columns: minmax(128px, auto) minmax(0, 1fr);
         gap: 10px;
         align-items: center;
       }
@@ -137,6 +137,24 @@
         color: #d68c12;
       }
 
+      .difficulty-stepper {
+        display: inline-grid;
+        flex: 0 0 auto;
+        grid-template-columns: 34px auto 34px;
+        gap: 6px;
+        align-items: center;
+      }
+
+      .difficulty-stepper .icon-button {
+        width: 34px;
+        height: 34px;
+        box-shadow: none;
+      }
+
+      .difficulty-chip {
+        min-width: 76px;
+      }
+
       .icon-button {
         appearance: none;
         display: inline-flex;
@@ -182,41 +200,6 @@
         width: 38px;
         height: 38px;
         background: rgba(255, 255, 255, 0.76);
-      }
-
-      .level-strip {
-        align-self: end;
-        display: flex;
-        min-width: 0;
-        gap: 8px;
-        overflow-x: auto;
-        padding: 0 2px 12px;
-        scrollbar-width: none;
-      }
-
-      .level-strip::-webkit-scrollbar {
-        display: none;
-      }
-
-      .level-button {
-        appearance: none;
-        flex: 0 0 auto;
-        width: 36px;
-        height: 36px;
-        border: 1px solid rgba(24, 32, 36, 0.13);
-        border-radius: 8px;
-        background: rgba(255, 255, 255, 0.72);
-        color: #182024;
-        font-size: 0.82rem;
-        font-weight: 800;
-        cursor: pointer;
-        backdrop-filter: blur(10px);
-      }
-
-      .level-button[data-active="true"] {
-        border-color: transparent;
-        background: #e85d4f;
-        color: #ffffff;
       }
 
       .toolbar {
@@ -383,6 +366,20 @@
           font-size: 0.76rem;
         }
 
+        .difficulty-stepper {
+          gap: 4px;
+          grid-template-columns: 32px auto 32px;
+        }
+
+        .difficulty-stepper .icon-button {
+          width: 32px;
+          height: 32px;
+        }
+
+        .difficulty-chip {
+          min-width: 66px;
+        }
+
         .toolbar {
           gap: 7px;
         }
@@ -419,16 +416,20 @@
             <span>和AI一起消方块</span>
           </div>
           <div class="stats" aria-live="polite">
-            <span class="chip">关卡 <strong id="hud-level">1</strong></span>
+            <div class="difficulty-stepper" aria-label="难度等级">
+              <button class="icon-button" id="hud-difficulty-prev" type="button" title="降低难度">
+                <i data-lucide="chevron-left"></i>
+              </button>
+              <span class="chip difficulty-chip">难度 <strong id="hud-difficulty">1</strong></span>
+              <button class="icon-button" id="hud-difficulty-next" type="button" title="提高难度">
+                <i data-lucide="chevron-right"></i>
+              </button>
+            </div>
             <span class="chip">步数 <strong id="hud-moves">0/0</strong></span>
             <span class="chip">剩余 <strong id="hud-left">0</strong></span>
             <span class="chip stars" id="hud-stars">---</span>
           </div>
-          <button class="icon-button" id="hud-next" type="button" title="下一关">
-            <i data-lucide="step-forward"></i>
-          </button>
         </header>
-        <nav class="level-strip" id="level-strip" aria-label="关卡"></nav>
         <footer class="toolbar">
           <button class="tool-button" id="hud-reset" type="button">
             <i data-lucide="refresh-ccw"></i>
@@ -463,7 +464,7 @@
           <p id="result-copy">---</p>
           <div class="result-actions">
             <button class="text-button secondary" id="result-retry" type="button">重玩</button>
-            <button class="text-button" id="result-next" type="button">下一关</button>
+            <button class="text-button" id="result-next" type="button">下一难度</button>
           </div>
         </div>
       </section>
