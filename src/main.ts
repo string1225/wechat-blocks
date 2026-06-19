@@ -1,4 +1,5 @@
 import { Game } from "./game/Game";
+import { now } from "./platform/clock";
 import { BrowserHud } from "./ui/BrowserHud";
 import type { GameUi } from "./ui/GameUi";
 import { NoopHud } from "./ui/NoopHud";
@@ -220,8 +221,4 @@ function createWechatPointerEvent(target: WechatCanvas, type: string, touch: Wec
     timeStamp: now(),
     type
   } as unknown as PointerEvent;
-}
-
-function now(): number {
-  return globalThis.performance?.now?.() ?? Date.now();
 }

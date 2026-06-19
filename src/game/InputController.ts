@@ -1,3 +1,5 @@
+import { now } from "../platform/clock";
+
 export interface InputHandlers {
   onTap: (clientX: number, clientY: number) => void;
   onRotate: (deltaX: number, deltaY: number) => void;
@@ -43,7 +45,7 @@ export class InputController {
       y: event.clientY,
       startX: event.clientX,
       startY: event.clientY,
-      startedAt: performance.now()
+      startedAt: now()
     });
 
     if (this.pointers.size >= 2) {
@@ -87,7 +89,7 @@ export class InputController {
     this.canvas.releasePointerCapture?.(event.pointerId);
 
     const travel = Math.hypot(event.clientX - pointer.startX, event.clientY - pointer.startY);
-    const duration = performance.now() - pointer.startedAt;
+    const duration = now() - pointer.startedAt;
     const isTap = travel < 7 && duration < 360 && !this.hadMultiTouch;
 
     if (isTap) {

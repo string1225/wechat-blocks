@@ -7,6 +7,8 @@ const ts = require("typescript");
 
 const projectRoot = path.resolve(__dirname, "..");
 const mainSource = readFileSync(path.join(projectRoot, "src", "main.ts"), "utf8");
+const gameSource = readFileSync(path.join(projectRoot, "src", "game", "Game.ts"), "utf8");
+const inputControllerSource = readFileSync(path.join(projectRoot, "src", "game", "InputController.ts"), "utf8");
 const mainScript = ts.transpileModule(mainSource, {
   compilerOptions: {
     module: ts.ModuleKind.CommonJS,
@@ -87,6 +89,12 @@ function createRequireStub(observed) {
       };
     }
 
+    if (request === "./platform/clock") {
+      return {
+        now: () => 123
+      };
+    }
+
     throw new Error(`Unexpected require: ${request}`);
   };
 }
@@ -153,6 +161,11 @@ test("adapts wx canvas to the DOM event APIs expected by Three.js", () => {
   assert.equal(receivedPointer.pointerId, 7);
   assert.equal(receivedPointer.clientX, 12);
   assert.equal(receivedPointer.clientY, 34);
+});
+
+test("game runtime uses a safe clock when performance is unavailable", () => {
+  assert.equal(gameSource.includes("performance.now()"), false);
+  assert.equal(inputControllerSource.includes("performance.now()"), false);
 });
 
 test("uses the browser canvas when a real DOM document is available", () => {

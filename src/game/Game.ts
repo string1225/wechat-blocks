@@ -4,6 +4,7 @@ import type { GameUi, UiState } from "../ui/GameUi";
 import { CubeGrid, type GridBlock } from "../world/CubeGrid";
 import { GameScene } from "./GameScene";
 import { InputController } from "./InputController";
+import { now } from "../platform/clock";
 import type { GamePhase, LevelConfig, Position3, PowerupState, TurnSnapshot } from "./types";
 
 type FlightSource = "Fly" | "Bomb" | "Silent";
@@ -42,7 +43,7 @@ export class Game {
   }
 
   start(): void {
-    this.lastTime = performance.now();
+    this.lastTime = now();
     requestAnimationFrame(this.tick);
   }
 
