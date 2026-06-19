@@ -107,6 +107,54 @@ test("uses wx canvas when WeChat provides a non-DOM document shim", () => {
   assert.equal(observed.started, true);
 });
 
+test("adapts wx canvas to the DOM event APIs expected by Three.js", () => {
+  const wxCanvas = { runtime: "wechat" };
+  const touchHandlers = {};
+
+  const observed = runMain({
+    document: {},
+    wx: {
+      createCanvas: () => wxCanvas,
+      getSystemInfoSync: () => ({ windowWidth: 320, windowHeight: 640 }),
+      onTouchCancel: (handler) => {
+        touchHandlers.cancel = handler;
+      },
+      onTouchEnd: (handler) => {
+        touchHandlers.end = handler;
+      },
+      onTouchMove: (handler) => {
+        touchHandlers.move = handler;
+      },
+      onTouchStart: (handler) => {
+        touchHandlers.start = handler;
+      }
+    }
+  });
+
+  assert.equal(observed.canvas, wxCanvas);
+  assert.equal(typeof observed.canvas.addEventListener, "function");
+  assert.equal(typeof observed.canvas.removeEventListener, "function");
+  assert.equal(typeof observed.canvas.getBoundingClientRect, "function");
+  assert.equal(typeof observed.canvas.setAttribute, "function");
+
+  const rect = observed.canvas.getBoundingClientRect();
+  assert.equal(rect.width, 320);
+  assert.equal(rect.height, 640);
+
+  let receivedPointer = null;
+  observed.canvas.addEventListener("pointerdown", (event) => {
+    receivedPointer = event;
+  });
+
+  touchHandlers.start({
+    changedTouches: [{ identifier: 7, clientX: 12, clientY: 34 }]
+  });
+
+  assert.equal(receivedPointer.pointerId, 7);
+  assert.equal(receivedPointer.clientX, 12);
+  assert.equal(receivedPointer.clientY, 34);
+});
+
 test("uses the browser canvas when a real DOM document is available", () => {
   class FakeHTMLCanvasElement {}
   const browserCanvas = new FakeHTMLCanvasElement();
