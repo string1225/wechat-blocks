@@ -122,6 +122,7 @@ export class GameScene {
     });
     this.renderer.setPixelRatio(getDevicePixelRatio());
     this.renderer.setClearColor(0xeef4ef, 1);
+    this.renderer.autoClear = false;
 
     this.camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
     this.scene.background = new THREE.Color(0xeef4ef);
@@ -259,6 +260,7 @@ export class GameScene {
   }
 
   render(): void {
+    this.renderer.clear();
     this.renderer.render(this.scene, this.camera);
     if (this.sceneHud && this.hudState) {
       this.updateHud();

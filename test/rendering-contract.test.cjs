@@ -20,3 +20,9 @@ test("renderer uses the platform pixel ratio for crisp mobile lines", () => {
   assert.match(sceneSource, /getDevicePixelRatio/);
   assert.equal(sceneSource.includes("globalThis.devicePixelRatio || 1"), false);
 });
+
+test("scene hud renders as an overlay without clearing the main scene", () => {
+  assert.match(sceneSource, /this\.renderer\.autoClear = false;/);
+  assert.match(sceneSource, /this\.renderer\.clear\(\);/);
+  assert.match(sceneSource, /this\.renderer\.clearDepth\(\);/);
+});
