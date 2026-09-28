@@ -1,0 +1,14 @@
+[Unit]
+Description=Back up WeChat Blocks progress
+After=wechat-blocks.service
+
+[Service]
+Type=oneshot
+User=wechat-blocks
+Group=wechat-blocks
+UMask=0077
+ExecStart=/usr/bin/python3 /opt/wechat-blocks/current/server/backup.py
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/wechat-blocks

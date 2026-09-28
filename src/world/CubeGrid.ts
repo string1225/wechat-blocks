@@ -188,6 +188,18 @@ export class CubeGrid {
     };
   }
 
+  settledSnapshot(): GridSnapshot {
+    const snapshot = this.snapshot();
+    for (const saved of snapshot.blocks) {
+      const flight = this.blocks[saved.instanceId]?.flight;
+      if (flight) {
+        saved.active = !flight.exitBoard;
+        saved.grid = { ...flight.finalGrid };
+      }
+    }
+    return snapshot;
+  }
+
   restore(snapshot: GridSnapshot): void {
     const byInstance = new Map(snapshot.blocks.map((block) => [block.instanceId, block]));
 

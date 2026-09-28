@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily WeChat Blocks progress backup
+
+[Timer]
+OnCalendar=*-*-* 04:20:00
+RandomizedDelaySec=300
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -5,6 +5,8 @@ import { CubeGrid, type GridBlock } from "../world/CubeGrid";
 import { GameScene } from "./GameScene";
 import { InputController } from "./InputController";
 import { now } from "../platform/clock";
+import { ProgressStore } from "../progress/ProgressStore";
+import { compactGrid, expandGrid, type GameProgress } from "../progress/schema";
 import type { GamePhase, LevelConfig, Position3, PowerupState, TurnSnapshot } from "./types";
 
 type FlightSource = "Fly" | "Bomb" | "Silent";
@@ -27,6 +29,8 @@ export class Game {
   private lastTime = 0;
   private resultShown = false;
   private debugCooldown = 0;
+  private readonly progress = new ProgressStore();
+  private ready = false;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -44,15 +48,31 @@ export class Game {
       window.addEventListener("resize", () => this.scene.resize());
     }
 
-    this.loadLevel(1);
+    if (this.progress.current) this.restoreProgress(this.progress.current);
+    else this.setLevel(1);
   }
 
   start(): void {
     this.lastTime = now();
     requestAnimationFrame(this.tick);
+    void this.progress.connect((saved) => {
+      if (saved) this.restoreProgress(saved);
+      else this.setLevel(1);
+    }).then((saved) => {
+      if (saved) this.restoreProgress(saved);
+      else this.setLevel(1);
+      this.ready = true;
+      this.saveProgress();
+    });
   }
 
   loadLevel(levelId: number): void {
+    if (!this.ready) return;
+    this.setLevel(levelId);
+    this.saveProgress();
+  }
+
+  private setLevel(levelId: number): void {
     this.level = getLevelConfig(levelId);
     this.grid = new CubeGrid(this.level);
     this.moves = 0;
@@ -81,7 +101,7 @@ export class Game {
   }
 
   undo(): void {
-    if (this.phase !== "playing" || this.grid.isAnimating() || this.powerups.undo <= 0) {
+    if (!this.ready || this.phase !== "playing" || this.grid.isAnimating() || this.powerups.undo <= 0) {
       return;
     }
 
@@ -96,10 +116,11 @@ export class Game {
     this.scene.updateBlocks(this.grid.blocks);
     this.ui.showToast("Undo");
     this.updateUi();
+    this.saveProgress();
   }
 
   useBomb(): void {
-    if (this.phase !== "playing" || this.grid.isAnimating() || this.powerups.bomb <= 0) {
+    if (!this.ready || this.phase !== "playing" || this.grid.isAnimating() || this.powerups.bomb <= 0) {
       return;
     }
 
@@ -117,7 +138,7 @@ export class Game {
   }
 
   toggleAuto(): void {
-    if (this.phase !== "playing" || this.grid.activeCount <= 0) {
+    if (!this.ready || this.phase !== "playing" || this.grid.activeCount <= 0) {
       return;
     }
 
@@ -154,6 +175,7 @@ export class Game {
   };
 
   private handleTap(clientX: number, clientY: number): void {
+    if (!this.ready) return;
     const hudAction = this.scene.pickHudAction(clientX, clientY);
     if (hudAction) {
       this.handleHudAction(hudAction);
@@ -201,7 +223,47 @@ export class Game {
       this.ui.showToast("Bomb");
     }
     this.updateUi();
+    this.saveProgress();
     return true;
+  }
+
+  private saveProgress(): void {
+    if (!this.ready) return;
+    const blocks = compactGrid(this.grid.settledSnapshot());
+    this.progress.save({
+      version: 1, level: this.level.id, moves: this.moves,
+      phase: blocks.length === 0 ? "won" : this.moves >= this.level.maxMoves ? "failed" : "playing",
+      blocks, powerups: { ...this.powerups },
+      history: this.history.map((turn) => ({ moves: turn.moves, blocks: compactGrid(turn.grid) }))
+    });
+  }
+
+  private restoreProgress(saved: GameProgress): void {
+    if (saved.phase === "won" && saved.level < LEVEL_COUNT) {
+      this.setLevel(saved.level + 1);
+      this.saveProgress();
+      return;
+    }
+    if (saved.phase === "failed") {
+      this.setLevel(saved.level);
+      this.saveProgress();
+      return;
+    }
+    this.level = getLevelConfig(saved.level);
+    this.grid = new CubeGrid(this.level);
+    const template = this.grid.snapshot();
+    this.grid.restore(expandGrid(saved.blocks, template));
+    this.moves = saved.moves;
+    this.phase = saved.phase;
+    this.powerups = { ...saved.powerups };
+    this.history = saved.history.map((turn) => ({ moves: turn.moves, grid: expandGrid(turn.blocks, template) }));
+    this.autoRunning = false;
+    this.autoCooldown = 0;
+    this.resultShown = false;
+    this.ui.hideResult();
+    this.scene.loadBlocks(this.grid.blocks, this.level.size);
+    this.updateUi();
+    if (this.phase === "won") this.showResultOnce();
   }
 
   private handleHudAction(action: string): void {
