@@ -4,7 +4,8 @@ import type { GamePhase, GridSnapshot, Position3, PowerupState } from "../game/t
 export type SavedBlock = [number, number, number, number];
 export interface SavedTurn { blocks: SavedBlock[]; moves: number }
 export interface GameProgress extends SavedTurn {
-  version: 1 | 2;
+  version: 1 | 2 | 3;
+  elapsedMs?: number;
   level: number;
   phase: GamePhase;
   powerups: PowerupState;
@@ -27,7 +28,8 @@ export function expandGrid(blocks: SavedBlock[], template: GridSnapshot): GridSn
 export function isGameProgress(value: unknown): value is GameProgress {
   if (!value || typeof value !== "object") return false;
   const p = value as GameProgress;
-  if ((p.version !== 1 && p.version !== 2) || !integer(p.level, 1, p.version === 1 ? 10 : Number.MAX_SAFE_INTEGER)) return false;
+  if (![1, 2, 3].includes(p.version) || !integer(p.level, 1, p.version === 1 ? 10 : Number.MAX_SAFE_INTEGER)) return false;
+  if (p.elapsedMs !== undefined && !integer(p.elapsedMs, 0, Number.MAX_SAFE_INTEGER)) return false;
   const { dimensions, maxMoves } = getLevelConfig(p.level, p.version);
   if (!integer(p.moves, 0, maxMoves) || !["playing", "won", "failed"].includes(p.phase)) return false;
   if (!p.powerups || !integer(p.powerups.undo, 0, 5) || !integer(p.powerups.bomb, 0, 3)) return false;

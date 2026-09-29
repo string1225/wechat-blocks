@@ -11,7 +11,7 @@ const { CubeGrid } = require("../src/world/CubeGrid.ts");
 const { getLevelConfig } = require("../src/data/levels.ts");
 
 function sample(level = 1) {
-  return { version: 2, level, moves: 0, phase: "playing", powerups: { undo: 5, bomb: 3 },
+  return { version: 3, level, moves: 0, phase: "playing", powerups: { undo: 5, bomb: 3 },
     blocks: compactGrid(new CubeGrid(getLevelConfig(level)).snapshot()), history: [] };
 }
 function platform(initial = null) {
@@ -168,4 +168,18 @@ test("large level saves use a normal request instead of the browser's 64 KiB kee
     assert.ok(options.body.length > 65536);
     assert.equal(options.keepalive, false);
   } finally { global.fetch = original; }
+});
+
+test("elapsed time is optional for old saves and invalid timer values are rejected", () => {
+  const p = sample();
+  assert.equal(isGameProgress(p), true);
+  assert.equal(isGameProgress({ ...p, elapsedMs: 61023 }), true);
+  for (const elapsedMs of [-1, 0.5, NaN, Infinity, "100", null, true, Number.MAX_SAFE_INTEGER + 1])
+    assert.equal(isGameProgress({ ...p, elapsedMs }), false);
+});
+
+test("timer formatting supports minutes and games lasting more than an hour", () => {
+  const { formatTime } = require("../src/ui/formatTime.ts");
+  assert.equal(formatTime(0), "00:00"); assert.equal(formatTime(61), "01:01");
+  assert.equal(formatTime(3600), "1:00:00"); assert.equal(formatTime(3661), "1:01:01");
 });

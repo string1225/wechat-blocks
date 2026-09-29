@@ -283,7 +283,7 @@ export class CubeGrid {
         }
       }
 
-      if (level.layoutVersion === 2 || validateSolvable(blocks, level.size)) {
+      if (level.layoutVersion !== 1 || validateSolvable(blocks, level.size)) {
         return blocks;
       }
     }

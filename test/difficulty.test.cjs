@@ -27,11 +27,11 @@ test("the published gradient grows one axis at a time and supports levels beyond
 });
 
 test("rectangular and advanced boards are deterministic, valid saves and solvable without bombs", () => {
-  for (const level of [1, 2, 3, 10, 11, 14, 22, 100, 1000]) {
+  for (const level of [1, 2, 3, 10, 11, 14, 22, 100, 101, 111, 121, 201]) {
     const config = getLevelConfig(level), grid = new CubeGrid(config);
     assert.equal(grid.activeCount, config.dimensions.x * config.dimensions.y * config.dimensions.z);
     assert.deepEqual(grid.snapshot(), new CubeGrid(config).snapshot());
-    const progress = { version: 2, level, moves: 0, phase: "playing", blocks: compactGrid(grid.snapshot()),
+    const progress = { version: 3, level, moves: 0, phase: "playing", blocks: compactGrid(grid.snapshot()),
       powerups: { bomb: 3, undo: 5 }, history: [] };
     assert.equal(isGameProgress(progress), true);
     const invalid = structuredClone(progress); invalid.blocks[0][2] = config.dimensions.y;
@@ -60,5 +60,14 @@ test("legacy save templates retain exactly the same cells and arrows as the rele
   for (const [level, expected] of Object.entries(golden)) {
     const grid = new CubeGrid(getLevelConfig(Number(level), 1));
     assert.equal(createHash("sha256").update(JSON.stringify(grid.snapshot())).digest("hex"), expected);
+  }
+});
+
+test("version two retains its original dimensions while new games keep growing after 100", () => {
+  for (const { level, x, y, z } of require("./fixtures/difficulty-v2.json"))
+    assert.deepEqual(getLevelConfig(level, 2).dimensions, { x, y, z });
+  for (let level = 101; level <= 1000; level += 10) {
+    const before = getLevelConfig(level - 1).dimensions, after = getLevelConfig(level).dimensions;
+    assert.equal(after.x + after.y + after.z - before.x - before.y - before.z, 1);
   }
 });

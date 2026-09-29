@@ -29,6 +29,10 @@ export class Game {
   private bombTarget: number | null = null;
   private autoCooldown = 0;
   private lastTime = 0;
+  private elapsedMs = 0;
+  private timerSample = now();
+  private timerSavedAt = 0;
+  private background = false;
   private resultShown = false;
   private debugCooldown = 0;
   private readonly progress = new ProgressStore();
@@ -49,6 +53,15 @@ export class Game {
     if (typeof window !== "undefined") {
       window.addEventListener("resize", () => this.scene.resize());
     }
+    if (typeof wx !== "undefined" && wx) {
+      wx.onHide?.(this.pauseTimer);
+      wx.onShow?.(this.resumeTimer);
+    } else if (typeof document !== "undefined") {
+      this.background = document.hidden;
+      document.addEventListener("visibilitychange", () => document.hidden ? this.pauseTimer() : this.resumeTimer());
+      window.addEventListener("pagehide", this.pauseTimer);
+      window.addEventListener("pageshow", this.resumeTimer);
+    }
 
     if (this.progress.current) this.restoreProgress(this.progress.current);
     else this.setLevel(1);
@@ -64,6 +77,7 @@ export class Game {
       if (saved) this.restoreProgress(saved);
       else this.setLevel(1);
       this.ready = true;
+      this.timerSample = now();
       this.saveProgress();
     });
   }
@@ -78,6 +92,9 @@ export class Game {
     this.level = getLevelConfig(levelId);
     this.grid = new CubeGrid(this.level);
     this.moves = 0;
+    this.elapsedMs = 0;
+    this.timerSavedAt = 0;
+    this.timerSample = now();
     this.phase = "playing";
     this.powerups = { undo: 5, bomb: 3 };
     this.history = [];
@@ -184,6 +201,11 @@ export class Game {
   private readonly tick = (time: number): void => {
     const dt = Math.min(0.05, Math.max(0, (time - this.lastTime) / 1000));
     this.lastTime = time;
+    if (this.background) { requestAnimationFrame(this.tick); return; }
+    const previousSecond = Math.floor(this.elapsedMs / 1000);
+    this.advanceTimer();
+    if (Math.floor(this.elapsedMs / 1000) !== previousSecond) this.updateUi();
+    if (this.elapsedMs - this.timerSavedAt >= 15000) this.saveProgress();
 
     const update = this.grid.update(dt);
     if (update.changed) {
@@ -198,6 +220,25 @@ export class Game {
     this.scene.render(dt);
     this.publishDebug(dt);
     requestAnimationFrame(this.tick);
+  };
+
+  private advanceTimer(): void {
+    const sample = now();
+    if (this.ready && !this.background && this.phase === "playing") this.elapsedMs += Math.max(0, sample - this.timerSample);
+    this.timerSample = sample;
+  }
+
+  private readonly pauseTimer = (): void => {
+    this.advanceTimer();
+    this.background = true;
+    this.saveProgress();
+    if (this.ready) void this.progress.flush();
+  };
+
+  private readonly resumeTimer = (): void => {
+    this.background = false;
+    this.timerSample = now();
+    this.lastTime = now();
   };
 
   private handleTap(clientX: number, clientY: number): void {
@@ -260,9 +301,12 @@ export class Game {
 
   private saveProgress(): void {
     if (!this.ready) return;
+    this.advanceTimer();
+    this.timerSavedAt = this.elapsedMs;
     const blocks = compactGrid(this.grid.settledSnapshot());
     this.progress.save({
       version: this.level.layoutVersion, level: this.level.id, moves: this.moves,
+      elapsedMs: Math.floor(this.elapsedMs),
       phase: blocks.length === 0 ? "won" : this.moves >= this.level.maxMoves ? "failed" : "playing",
       blocks, powerups: { ...this.powerups },
       history: (this.powerups.undo > 0 ? this.history.slice(-this.powerups.undo) : [])
@@ -286,6 +330,9 @@ export class Game {
     const template = this.grid.snapshot();
     this.grid.restore(expandGrid(saved.blocks, template));
     this.moves = saved.moves;
+    this.elapsedMs = saved.elapsedMs ?? 0;
+    this.timerSavedAt = this.elapsedMs;
+    this.timerSample = now();
     this.phase = saved.phase;
     this.powerups = { ...saved.powerups };
     this.history = saved.history.map((turn) => ({ moves: turn.moves, grid: expandGrid(turn.blocks, template) }));
@@ -359,16 +406,20 @@ export class Game {
     }
 
     if (this.grid.activeCount === 0) {
+      this.advanceTimer();
       this.phase = "won";
       this.autoRunning = false;
       this.showResultOnce();
+      this.saveProgress();
       return;
     }
 
     if (this.moves >= this.level.maxMoves) {
+      this.advanceTimer();
       this.phase = "failed";
       this.autoRunning = false;
       this.showResultOnce();
+      this.saveProgress();
     }
   }
 
@@ -381,6 +432,7 @@ export class Game {
     this.ui.showResult({
       phase: this.phase === "won" ? "won" : "failed",
       level: this.level.id,
+      elapsedSeconds: Math.floor(this.elapsedMs / 1000),
       moves: this.moves,
       stars: this.calculateStars()
     });
@@ -391,6 +443,8 @@ export class Game {
       autoRunning: this.autoRunning,
       canUndo: this.history.length > 0 && this.powerups.undo > 0,
       level: this.level.id,
+      dimensions: this.level.dimensions,
+      elapsedSeconds: Math.floor(this.elapsedMs / 1000),
       bombArmed: this.bombArmed,
       bombTarget: this.bombTarget === null ? null : this.grid.blocks[this.bombTarget]!.grid,
       maxMoves: this.level.maxMoves,

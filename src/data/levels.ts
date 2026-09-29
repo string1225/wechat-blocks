@@ -8,7 +8,12 @@ const PALETTES: readonly (readonly string[])[] = [
 
 const FALLBACK_PALETTE = PALETTES[0]!;
 
-export function getLevelDimensions(levelId: number): { x: number; y: number; z: number } {
+export function getLevelDimensions(levelId: number, version: 2 | 3 = 3): { x: number; y: number; z: number } {
+  if (version === 3 && levelId > 100) {
+    const increments = 1 + Math.floor((levelId - 101) / 10);
+    const edge = 9 + Math.floor(increments / 3), steps = increments % 3;
+    return { x: edge + Number(steps >= 1), y: edge, z: edge + Number(steps >= 2) };
+  }
   let remaining = levelId - 1, edge = 4, interval = 1;
   // Grow length, width, then height. Each complete cycle doubles the
   // interval so the board grows gradually even far beyond level ten.
@@ -21,10 +26,10 @@ export function getLevelDimensions(levelId: number): { x: number; y: number; z: 
   return { x: edge + (steps >= 1 ? 1 : 0), y: edge, z: edge + (steps >= 2 ? 1 : 0) };
 }
 
-export function getLevelConfig(levelId: number, layoutVersion: 1 | 2 = 2): LevelConfig {
+export function getLevelConfig(levelId: number, layoutVersion: 1 | 2 | 3 = 3): LevelConfig {
   const id = Number.isSafeInteger(levelId) && levelId >= 1 ? levelId : 1;
   const oldSize = id <= 3 ? 4 : id <= 7 ? 5 : 6;
-  const dimensions = layoutVersion === 1 ? { x: oldSize, y: oldSize, z: oldSize } : getLevelDimensions(id);
+  const dimensions = layoutVersion === 1 ? { x: oldSize, y: oldSize, z: oldSize } : getLevelDimensions(id, layoutVersion);
   const size = Math.max(dimensions.x, dimensions.y, dimensions.z);
   const blockCount = dimensions.x * dimensions.y * dimensions.z;
   const bestGuess = blockCount;

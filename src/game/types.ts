@@ -14,7 +14,7 @@ export interface LevelConfig {
   name: string;
   size: number;
   dimensions: Position3;
-  layoutVersion: 1 | 2;
+  layoutVersion: 1 | 2 | 3;
   maxMoves: number;
   starThresholds: readonly [number, number, number];
   seed: number;

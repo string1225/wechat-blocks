@@ -26,6 +26,10 @@ def level_dimensions(level, version):
     if version == 1:
         edge = 4 if level <= 3 else 5 if level <= 7 else 6
         return edge, edge, edge
+    if version == 3 and level > 100:
+        increments = 1 + (level - 101) // 10
+        edge, steps = 9 + increments // 3, increments % 3
+        return edge + int(steps >= 1), edge, edge + int(steps >= 2)
     remaining, edge, interval = level - 1, 4, 1
     while remaining >= 3 * interval:
         remaining -= 3 * interval
@@ -54,8 +58,10 @@ def valid_blocks(blocks, dimensions):
 
 
 def valid_progress(p):
-    if (not isinstance(p, dict) or not integer(p.get("version"), 1, 2)
+    if (not isinstance(p, dict) or not integer(p.get("version"), 1, 3)
             or not integer(p.get("level"), 1, 10 if p["version"] == 1 else 9007199254740991)):
+        return False
+    if "elapsedMs" in p and not integer(p["elapsedMs"], 0, 9007199254740991):
         return False
     dimensions = level_dimensions(p["level"], p["version"])
     max_moves = dimensions[0] * dimensions[1] * dimensions[2] + 8

@@ -20,8 +20,8 @@ class ProgressTests(unittest.TestCase):
         table = json.loads((Path(__file__).parent.parent / "test/fixtures/difficulty.json").read_text())
         for row in table:
             dimensions = (row["x"], row["y"], row["z"])
-            self.assertEqual(level_dimensions(row["level"], 2), dimensions)
-            progress = {**sample(), "version": 2, "level": row["level"],
+            self.assertEqual(level_dimensions(row["level"], 3), dimensions)
+            progress = {**sample(), "version": 3, "level": row["level"],
                         "blocks": [[0, row["x"] - 1, row["y"] - 1, row["z"] - 1]]}
             self.assertTrue(valid_progress(progress))
             progress["blocks"][0][2] = row["y"]
@@ -33,6 +33,19 @@ class ProgressTests(unittest.TestCase):
         self.assertEqual(self.request("/progress", token=session["token"])[1]["progress"], progress)
         progress["version"] = 1
         self.assertFalse(valid_progress(progress))
+
+    def test_legacy_dimensions_and_elapsed_time(self):
+        table = json.loads((Path(__file__).parent.parent / "test/fixtures/difficulty-v2.json").read_text())
+        for row in table:
+            self.assertEqual(level_dimensions(row["level"], 2), (row["x"], row["y"], row["z"]))
+        progress = {**sample(), "version": 3, "level": 101, "elapsedMs": 61023, "blocks": [[809, 9, 8, 8]]}
+        self.assertTrue(valid_progress(progress))
+        _, session = self.request("/session/guest", "POST")
+        self.assertEqual(self.request("/progress", "PUT", session["token"],
+            {"revision": 0, "mutation": "timed-progress", "progress": progress})[0], 200)
+        self.assertEqual(self.request("/progress", token=session["token"])[1]["progress"], progress)
+        for bad in [-1, 0.5, True, None, "100", 9007199254740992]:
+            self.assertFalse(valid_progress({**progress, "elapsedMs": bad}))
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()

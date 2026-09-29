@@ -4,6 +4,8 @@ export interface UiState {
   autoRunning: boolean;
   canUndo: boolean;
   level: number;
+  dimensions: Position3;
+  elapsedSeconds: number;
   bombArmed: boolean;
   bombTarget: Position3 | null;
   maxMoves: number;
@@ -17,6 +19,7 @@ export interface UiState {
 export interface ResultState {
   phase: Exclude<GamePhase, "playing">;
   level: number;
+  elapsedSeconds: number;
   moves: number;
   stars: number;
 }

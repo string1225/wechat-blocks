@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import type { Position3 } from "./types";
-import { getDevicePixelRatio } from "../platform/display";
+import { getDevicePixelRatio, getHudInsets } from "../platform/display";
 import type { UiState } from "../ui/GameUi";
 import { SceneHud, type SceneHudAction } from "../ui/SceneHud";
 import { BLOCK_SIZE, type GridBlock } from "../world/CubeGrid";
@@ -33,8 +33,9 @@ export class GameScene {
   private bombTarget: number | null = null;
   private blocks: readonly GridBlock[] = [];
   private mesh: THREE.InstancedMesh | null = null;
-  private theta = Math.PI * 0.22;
-  private phi = Math.PI * 0.34;
+  private readonly orbit = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI * 0.16, Math.PI * 0.22, 0, "YXZ"));
+  private readonly orbitDelta = new THREE.Quaternion();
+  private dimensions: Position3 = { x: 4, y: 4, z: 4 };
   private activeSize = 4;
   private zoomFactor = 1;
   private baseRadius = 7;
@@ -83,6 +84,7 @@ export class GameScene {
     this.mesh.frustumCulled = false;
     this.scene.add(this.mesh);
     this.activeSize = Math.max(dimensions.x, dimensions.y, dimensions.z);
+    this.dimensions = { ...dimensions };
     this.target.set(0, ((dimensions.y - 1) * BLOCK_SIZE) / 2, 0);
     this.camera.far = Math.max(100, this.activeSize * BLOCK_SIZE * 40);
     this.camera.updateProjectionMatrix();
@@ -172,8 +174,9 @@ export class GameScene {
   }
 
   rotate(deltaX: number, deltaY: number): void {
-    this.theta = THREE.MathUtils.euclideanModulo(this.theta - deltaX * 0.006, Math.PI * 2);
-    this.phi = THREE.MathUtils.euclideanModulo(this.phi - deltaY * 0.005, Math.PI * 2);
+    // Orbit around screen up/right, even upside down or directly over a pole.
+    this.orbit.multiply(this.orbitDelta.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -deltaX * 0.006));
+    this.orbit.multiply(this.orbitDelta.setFromAxisAngle(new THREE.Vector3(1, 0, 0), -deltaY * 0.005)).normalize();
     this.updateCamera();
   }
 
@@ -228,23 +231,33 @@ export class GameScene {
   private get height(): number { return this.canvas.clientHeight || globalThis.innerHeight || 1; }
 
   private updateCamera(): void {
-    const sinPhi = Math.sin(this.phi);
-    this.camera.position.set(this.target.x + this.radius * sinPhi * Math.sin(this.theta),
-      this.target.y + this.radius * Math.cos(this.phi), this.target.z + this.radius * sinPhi * Math.cos(this.theta));
-    // A tangent up vector stays perpendicular to the view even at the poles,
-    // so crossing the top/bottom never clamps or abruptly flips the camera.
-    this.camera.up.set(-Math.cos(this.phi) * Math.sin(this.theta), sinPhi, -Math.cos(this.phi) * Math.cos(this.theta));
-    this.camera.lookAt(this.target);
+    this.camera.position.set(0, 0, this.radius).applyQuaternion(this.orbit).add(this.target);
+    this.camera.up.set(0, 1, 0).applyQuaternion(this.orbit);
+    this.camera.quaternion.copy(this.orbit);
+    this.camera.updateMatrixWorld();
     this.stage.visible = this.camera.position.y >= this.target.y;
   }
 
   private frameActiveBlocks(resetZoom = true): void {
-    const fov = THREE.MathUtils.degToRad(this.camera.fov);
-    const aspect = Math.max(0.55, this.camera.aspect || 1);
-    const desiredWidthFill = 0.35;
-    const diagonalWidth = this.activeSize * BLOCK_SIZE * 1.38;
-    this.baseRadius = diagonalWidth / (2 * Math.tan(fov / 2) * aspect * desiredWidthFill);
-    this.minRadius = Math.max(2.2, this.baseRadius * 0.55);
+    const insets = getHudInsets();
+    const playTop = insets.top + 148, playBottom = this.height - insets.bottom - 108;
+    const playHeight = Math.max(80, playBottom - playTop);
+    const centerY = (playTop + playBottom) / 2;
+    this.camera.setViewOffset(this.width, this.height, 0, this.height / 2 - centerY, this.width, this.height);
+    const inverse = this.orbit.clone().invert();
+    const tanY = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2));
+    const tanX = tanY * this.camera.aspect;
+    let radius = 0;
+    // Fit all eight perspective-projected corners to 90% width, also keeping
+    // short/landscape displays clear of the header and footer.
+    for (const x of [-1, 1]) for (const y of [-1, 1]) for (const z of [-1, 1]) {
+      const corner = new THREE.Vector3(x * this.dimensions.x, y * this.dimensions.y, z * this.dimensions.z)
+        .multiplyScalar(BLOCK_SIZE / 2).applyQuaternion(inverse);
+      radius = Math.max(radius, corner.z + Math.abs(corner.x) / (tanX * 0.9),
+        corner.z + Math.abs(corner.y) / (tanY * playHeight / this.height));
+    }
+    this.baseRadius = radius;
+    this.minRadius = Math.max(this.activeSize * BLOCK_SIZE * 0.9, this.baseRadius * 0.55);
     this.maxRadius = Math.max(this.baseRadius * 2.2, this.minRadius + 1);
     if (resetZoom) this.zoomFactor = 1;
     this.radius = THREE.MathUtils.clamp(this.baseRadius * this.zoomFactor, this.minRadius, this.maxRadius);

@@ -1,7 +1,10 @@
+import { formatTime } from "./formatTime";
 import { createIcons, icons } from "lucide";
 import type { GameUi, ResultState, UiHandlers, UiState } from "./GameUi";
 
 export class BrowserHud implements GameUi {
+  private readonly timer = mustGet<HTMLElement>("hud-timer");
+  private readonly dimensions = mustGet<HTMLElement>("hud-dimensions");
   private readonly difficulty = mustGet<HTMLElement>("hud-difficulty");
   private readonly difficultyPrev = mustGet<HTMLButtonElement>("hud-difficulty-prev");
   private readonly difficultyNext = mustGet<HTMLButtonElement>("hud-difficulty-next");
@@ -54,11 +57,13 @@ export class BrowserHud implements GameUi {
   update(state: UiState): void {
     this.currentLevel = state.level;
 
+    this.timer.textContent = formatTime(state.elapsedSeconds);
+    this.dimensions.textContent = `尺寸 ${state.dimensions.x} × ${state.dimensions.z} × ${state.dimensions.y}`;
     this.difficulty.textContent = String(state.level);
     this.left.textContent = String(state.remaining);
     this.stars.textContent = renderStars(state.stars);
-    this.undoCount.textContent = String(state.powerups.undo);
-    this.bombCount.textContent = state.bombArmed ? "已选中" : String(state.powerups.bomb);
+    this.undoCount.textContent = `${state.powerups.undo} 次可用`;
+    this.bombCount.textContent = state.bombArmed ? "点选方块" : `${state.powerups.bomb} 枚可用`;
     this.bomb.dataset.active = String(state.bombArmed);
     this.bomb.setAttribute("aria-pressed", String(state.bombArmed));
     this.bombDialog.dataset.visible = String(state.bombTarget !== null && state.phase === "playing");
@@ -70,6 +75,7 @@ export class BrowserHud implements GameUi {
     this.bomb.disabled = state.powerups.bomb <= 0 || state.remaining <= 0 || state.phase !== "playing";
     this.auto.disabled = state.remaining <= 0 || state.phase !== "playing";
     this.auto.dataset.active = String(state.autoRunning);
+    this.auto.setAttribute("aria-pressed", String(state.autoRunning));
 
     const autoIcon = state.autoRunning ? "pause" : "play";
     const currentIcon = this.auto.querySelector("svg")?.getAttribute("data-lucide");
@@ -78,7 +84,7 @@ export class BrowserHud implements GameUi {
       this.auto.innerHTML = `<i data-lucide="${autoIcon}"></i>${label}`;
       renderIcons();
     }
-    mustGet<HTMLElement>("hud-auto-state").textContent = state.autoRunning ? "开启" : "关闭";
+    mustGet<HTMLElement>("hud-auto-state").textContent = state.autoRunning ? "进行中" : "已关闭";
   }
 
   showToast(message: string): void {
@@ -94,8 +100,8 @@ export class BrowserHud implements GameUi {
     this.resultTitle.textContent = result.phase === "won" ? "过关" : "未完成";
     this.resultCopy.textContent =
       result.phase === "won"
-        ? `难度 ${result.level} · ${result.moves} 步 · ${renderStars(result.stars)}`
-        : `难度 ${result.level} · ${result.moves} 步`;
+        ? `难度 ${result.level} · 用时 ${formatTime(result.elapsedSeconds)} · ${renderStars(result.stars)}`
+        : `难度 ${result.level} · 用时 ${formatTime(result.elapsedSeconds)}`;
     this.resultNext.disabled = result.phase !== "won";
     this.result.dataset.visible = "true";
   }

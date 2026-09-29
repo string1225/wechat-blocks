@@ -6,414 +6,72 @@
     <title>智能消方块</title>
     <link rel="icon" type="image/png" href="assets/app-avatar.png" />
     <style>
-      .scene-hud-preview #hud,
-      .scene-hud-preview .zoom-controls,
-      .scene-hud-preview #result,
-      .scene-hud-preview #bomb-dialog,
-      .scene-hud-preview #bomb-hint,
-      .scene-hud-preview #toast { display: none; }
-      .bomb-hint { position: fixed; top: max(110px, calc(env(safe-area-inset-top) + 90px)); left: 50%; transform: translateX(-50%); padding: 10px 16px;
-        border-radius: 10px; background: #f1f3f8; color: #17202b; white-space: nowrap; font-size: 13px; pointer-events: none; }
-      #bomb-dialog { align-items: end; padding-bottom: 100px; backdrop-filter: none; background: rgba(12,18,40,0.45); }
-      :root {
-        color: #182024;
-        font-family:
-          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-          sans-serif;
-        font-size: 16px;
-        letter-spacing: 0;
-      }
-
-      * {
-        box-sizing: border-box;
-      }
-
-      html,
-      body,
-      #app {
-        width: 100%;
-        height: 100%;
-        margin: 0;
-        overflow: hidden;
-      }
-
-      body {
-        background: #eef4ef;
-      }
-
-      #app {
-        position: relative;
-        touch-action: none;
-      }
-
-      #game-canvas {
-        display: block;
-        width: 100%;
-        height: 100%;
-        outline: none;
-      }
-
-      .hud {
-        pointer-events: none;
-        position: absolute;
-        inset: 0;
-        display: grid;
-        grid-template-rows: auto 1fr auto;
-        padding: max(14px, env(safe-area-inset-top)) 14px max(16px, env(safe-area-inset-bottom));
-      }
-
-      .topbar,
-      .toolbar,
-      .difficulty-stepper,
-      .zoom-controls {
-        pointer-events: auto;
-      }
-
-      .topbar {
-        display: grid;
-        grid-template-columns: minmax(128px, auto) minmax(0, 1fr);
-        gap: 10px;
-        align-items: center;
-      }
-
-      .brand {
-        display: inline-grid;
-        min-width: 0;
-        height: 42px;
-        grid-template-columns: 32px minmax(0, auto);
-        gap: 8px;
-        align-items: center;
-        border: 1px solid rgba(24, 32, 36, 0.14);
-        border-radius: 8px;
-        padding: 4px 10px 4px 5px;
-        background: rgba(255, 255, 255, 0.78);
-        box-shadow: 0 8px 22px rgba(39, 57, 49, 0.1);
-        backdrop-filter: blur(12px);
-      }
-
-      .brand img {
-        width: 32px;
-        height: 32px;
-        border-radius: 8px;
-      }
-
-      .brand span {
-        overflow: hidden;
-        color: #182024;
-        font-size: 0.88rem;
-        font-weight: 850;
-        line-height: 1;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-
-      .stats {
-        display: flex;
-        min-width: 0;
-        gap: 8px;
-        align-items: center;
-        overflow-x: auto;
-        scrollbar-width: none;
-      }
-
-      .stats::-webkit-scrollbar {
-        display: none;
-      }
-
-      .chip {
-        display: inline-flex;
-        min-width: 58px;
-        height: 34px;
-        align-items: center;
-        justify-content: center;
-        gap: 5px;
-        border: 1px solid rgba(24, 32, 36, 0.14);
-        border-radius: 8px;
-        padding: 0 10px;
-        background: rgba(255, 255, 255, 0.74);
-        color: #182024;
-        font-size: 0.82rem;
-        font-weight: 700;
-        backdrop-filter: blur(12px);
-        white-space: nowrap;
-      }
-
-      .chip strong {
-        font-size: 0.96rem;
-      }
-
-      .stars {
-        color: #d68c12;
-      }
-
-      .difficulty-stepper {
-        display: inline-grid;
-        flex: 0 0 auto;
-        grid-template-columns: 34px auto 34px;
-        gap: 6px;
-        align-items: center;
-      }
-
-      .difficulty-stepper .icon-button {
-        width: 34px;
-        height: 34px;
-        box-shadow: none;
-      }
-
-      .difficulty-chip {
-        min-width: 76px;
-      }
-
-      .icon-button {
-        appearance: none;
-        display: inline-flex;
-        width: 42px;
-        height: 42px;
-        align-items: center;
-        justify-content: center;
-        border: 1px solid rgba(24, 32, 36, 0.14);
-        border-radius: 8px;
-        background: rgba(255, 255, 255, 0.82);
-        color: #182024;
-        box-shadow: 0 8px 22px rgba(39, 57, 49, 0.12);
-        cursor: pointer;
-        backdrop-filter: blur(12px);
-      }
-
-      .icon-button:disabled {
-        cursor: default;
-        opacity: 0.42;
-      }
-
-      .icon-button[data-active="true"] {
-        background: #1f9a77;
-        color: #ffffff;
-      }
-
-      .icon-button svg {
-        width: 19px;
-        height: 19px;
-        stroke-width: 2.3;
-      }
-
-      .zoom-controls {
-        position: absolute;
-        right: 14px;
-        top: 50%;
-        display: grid;
-        gap: 8px;
-        transform: translateY(-50%);
-      }
-
-      .zoom-controls .icon-button {
-        width: 38px;
-        height: 38px;
-        background: rgba(255, 255, 255, 0.76);
-      }
-
-      .toolbar {
-        grid-row: 3;
-        display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        gap: 10px;
-      }
-
-      .tool-button {
-        appearance: none;
-        display: grid;
-        min-width: 0;
-        height: 58px;
-        grid-template-columns: auto minmax(0, 1fr);
-        gap: 8px;
-        align-items: center;
-        border: 1px solid rgba(24, 32, 36, 0.14);
-        border-radius: 8px;
-        padding: 0 10px;
-        background: rgba(255, 255, 255, 0.84);
-        color: #182024;
-        box-shadow: 0 10px 26px rgba(39, 57, 49, 0.14);
-        cursor: pointer;
-        backdrop-filter: blur(14px);
-      }
-
-      .tool-button:disabled {
-        cursor: default;
-        opacity: 0.46;
-      }
-
-      .tool-button svg {
-        width: 20px;
-        height: 20px;
-        stroke-width: 2.35;
-      }
-
-      .tool-copy {
-        display: grid;
-        min-width: 0;
-        text-align: left;
-      }
-
-      .tool-copy b {
-        overflow: hidden;
-        font-size: 0.86rem;
-        line-height: 1.05;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-
-      .tool-copy span {
-        color: rgba(24, 32, 36, 0.62);
-        font-size: 0.72rem;
-        font-weight: 700;
-      }
-
-      .toast {
-        pointer-events: none;
-        position: absolute;
-        left: 50%;
-        top: 50%;
-        min-width: 140px;
-        transform: translate(-50%, -50%) scale(0.94);
-        border-radius: 8px;
-        padding: 12px 16px;
-        background: rgba(24, 32, 36, 0.82);
-        color: #ffffff;
-        font-size: 0.9rem;
-        font-weight: 800;
-        opacity: 0;
-        text-align: center;
-        transition:
-          opacity 160ms ease,
-          transform 160ms ease;
-      }
-
-      .toast[data-visible="true"] {
-        opacity: 1;
-        transform: translate(-50%, -50%) scale(1);
-      }
-
-      .result {
-        pointer-events: auto;
-        position: absolute;
-        inset: 0;
-        display: none;
-        place-items: center;
-        padding: 20px;
-        background: rgba(24, 32, 36, 0.24);
-        backdrop-filter: blur(8px);
-      }
-
-      .result[data-visible="true"] {
-        display: grid;
-      }
-
-      .result-panel {
-        width: min(340px, 100%);
-        border: 1px solid rgba(24, 32, 36, 0.12);
-        border-radius: 8px;
-        padding: 20px;
-        background: rgba(255, 255, 255, 0.94);
-        box-shadow: 0 22px 60px rgba(24, 32, 36, 0.22);
-        text-align: center;
-      }
-
-      .result-panel h1 {
-        margin: 0 0 8px;
-        font-size: 1.45rem;
-        line-height: 1.2;
-      }
-
-      .result-panel p {
-        margin: 0 0 18px;
-        color: rgba(24, 32, 36, 0.72);
-        font-weight: 700;
-      }
-
-      .result-actions {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 10px;
-      }
-
-      .text-button {
-        appearance: none;
-        height: 44px;
-        border: 0;
-        border-radius: 8px;
-        background: #1f9a77;
-        color: #ffffff;
-        font-weight: 850;
-        cursor: pointer;
-      }
-
-      .text-button.secondary {
-        background: #edf1ea;
-        color: #182024;
-      }
-
-      @media (max-width: 560px) {
-        .hud {
-          padding-inline: 10px;
-        }
-
-        .topbar {
-          grid-template-columns: minmax(0, 1fr) auto;
-        }
-
-        .brand {
-          grid-column: 1 / -1;
-          width: fit-content;
-          max-width: min(100%, 220px);
-        }
-
-        .zoom-controls {
-          right: 10px;
-        }
-
-        .chip {
-          min-width: 50px;
-          padding-inline: 8px;
-          font-size: 0.76rem;
-        }
-
-        .difficulty-stepper {
-          gap: 4px;
-          grid-template-columns: 32px auto 32px;
-        }
-
-        .difficulty-stepper .icon-button {
-          width: 32px;
-          height: 32px;
-        }
-
-        .difficulty-chip {
-          min-width: 66px;
-        }
-
-        .toolbar {
-          gap: 7px;
-        }
-
-        .tool-button {
-          height: 54px;
-          grid-template-columns: 1fr;
-          justify-items: center;
-          gap: 3px;
-          padding: 5px 4px;
-        }
-
-        .tool-copy {
-          text-align: center;
-        }
-
-        .tool-copy b {
-          font-size: 0.72rem;
-        }
-
-        .tool-copy span {
-          font-size: 0.66rem;
-        }
-      }
+      :root { color: #f2f7ff; font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 16px; }
+      * { box-sizing: border-box; }
+      html, body, #app { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+      body { background: #282d58; }
+      #app { position: relative; touch-action: none; }
+      #game-canvas { display: block; width: 100%; height: 100%; outline: none; }
+      button { font: inherit; -webkit-tap-highlight-color: transparent; cursor: pointer; transition: background .18s, color .18s, transform .18s; }
+      button:active:not(:disabled) { transform: scale(.96); }
+      button:focus-visible { outline: 2px solid #95f5cd; outline-offset: 3px; }
+      button:disabled { cursor: default; color: #8490af; }
+      .hud { pointer-events: none; position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: space-between;
+        padding: max(14px, env(safe-area-inset-top)) 12px max(18px, calc(env(safe-area-inset-bottom) + 18px)); }
+      .topbar, .toolbar { pointer-events: auto; width: min(100%, 440px); border: 1px solid #465071; border-radius: 22px;
+        background: #202744; box-shadow: 0 12px 36px #0d163326; }
+      .topbar { height: 136px; padding: 10px 12px 8px; }
+      .title-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 44px; margin-bottom: 10px; }
+      .brand { display: flex; align-items: center; gap: 8px; min-width: 0; }
+      .brand img { width: 34px; height: 34px; border-radius: 11px; }
+      .brand-copy { display: grid; gap: 3px; }
+      .brand span { font-size: 17px; font-weight: 750; white-space: nowrap; }
+      .brand small { font-size: 10px; color: #aab8d3; letter-spacing: 1px; }
+      .timer-chip { flex: 0 0 80px; display: grid; height: 44px; text-align: center; align-content: center; gap: 1px; background: #2b3455; border-radius: 12px; }
+      .timer-chip strong { font-size: 20px; font-variant-numeric: tabular-nums; line-height: 1.2; }
+      .timer-chip small { font-size: 10px; color: #aab8d3; }
+      .stats { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+      .difficulty-stepper { display: grid; grid-template-columns: 32px minmax(60px, 92px) 32px; gap: 4px; align-items: center; }
+      .chip { display: flex; height: 36px; align-items: center; justify-content: center; gap: 4px; font-size: 13px; white-space: nowrap; }
+      .chip strong { font-size: 15px; }
+      .remaining { padding: 0 10px; background: #2b3455; border-radius: 12px; }
+      .meta-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 6px; padding: 0 4px; height: 22px; font-size: 12px; color: #aab8d3; }
+      .stars { color: #ffd18c; font-size: 16px; letter-spacing: 3px; }
+      .icon-button { display: flex; align-items: center; justify-content: center; width: 32px; height: 36px; border: 1px solid #465071;
+        border-radius: 12px; background: #333d60; color: #f2f7ff; }
+      .icon-button svg { width: 18px; height: 18px; stroke-width: 2; }
+      .toolbar { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 6px; padding: 8px 8px 4px; height: 106px; }
+      .tool-button { min-width: 0; height: 76px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px;
+        border: 1px solid #465071; border-radius: 15px; padding: 7px 2px; background: #333d60; color: #f2f7ff; }
+      .tool-button svg { width: 20px; height: 20px; stroke-width: 1.8; }
+      .tool-copy { display: grid; text-align: center; gap: 4px; }
+      .tool-copy b { font-size: 14px; line-height: 1; }
+      .tool-copy span { font-size: 10px; color: #aab8d3; white-space: nowrap; }
+      .tool-button:disabled .tool-copy span { color: #75809e; }
+      .tool-button[data-active="true"] { background: #95f5cd; color: #173e34; border-color: #95f5cd; }
+      .tool-button[data-active="true"] .tool-copy span { color: #32604e; }
+      #hud-bomb[data-active="true"] { background: #ffd18c; border-color: #ffd18c; }
+      .gesture-hint { grid-column: 1 / -1; text-align: center; font-size: 10px; color: #aab8d3; line-height: 12px; }
+      .zoom-controls { position: absolute; right: 14px; bottom: max(140px, calc(env(safe-area-inset-bottom) + 140px)); display: flex; gap: 6px; }
+      .zoom-controls .icon-button { background: #202744; height: 30px; width: 30px; opacity: .85; }
+      .toast { pointer-events: none; position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); border-radius: 14px;
+        padding: 12px 18px; background: #202744ed; opacity: 0; transition: opacity .16s; font-size: 14px; }
+      .toast[data-visible="true"] { opacity: 1; }
+      .bomb-hint { position: absolute; top: max(158px, calc(env(safe-area-inset-top) + 144px)); left: 50%; transform: translateX(-50%);
+        padding: 8px 12px; border-radius: 12px; color: #173e34; background: #ffd18c; font-size: 12px; white-space: nowrap; pointer-events: none; }
+      .result { position: absolute; inset: 0; display: none; place-items: center; padding: 20px; background: #0c1228a6; }
+      .result[data-visible="true"] { display: grid; }
+      #bomb-dialog { align-items: end; padding-bottom: max(140px, calc(env(safe-area-inset-bottom) + 140px)); }
+      .result-panel { width: min(340px,100%); border: 1px solid #465071; border-radius: 22px; padding: 28px 20px 20px; background: #202744; text-align: center; box-shadow: 0 24px 70px #0c12285c; }
+      .result-panel h1 { margin: 0 0 14px; font-size: 25px; }
+      .result-panel p { margin: 0 0 28px; color: #aab8d3; font-size: 12px; line-height: 1.6; }
+      .result-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+      .text-button { height: 46px; border: 0; border-radius: 12px; background: #95f5cd; color: #173e34; font-size: 14px; font-weight: 700; }
+      .text-button.secondary { color: #f2f7ff; background: #333d60; }
+      .text-button:disabled { opacity: .4; }
+      .scene-hud-preview #hud, .scene-hud-preview .zoom-controls, .scene-hud-preview #result,
+      .scene-hud-preview #bomb-dialog, .scene-hud-preview #bomb-hint, .scene-hud-preview #toast { display: none; }
+      @media (max-width: 340px) { .brand img { display: none; } .brand span { font-size: 17px; } .remaining { padding: 0 7px; font-size: 12px; } }
     </style>
   </head>
   <body>
@@ -421,9 +79,12 @@
       <canvas id="game-canvas" aria-label="智能消方块"></canvas>
       <div class="hud" id="hud">
         <header class="topbar">
+          <div class="title-row">
           <div class="brand" aria-label="智能消方块">
             <img src="assets/app-avatar.png" alt="" />
-            <span>智能消方块</span>
+            <div class="brand-copy"><span>智能消方块</span><small>3D 空间消除</small></div>
+          </div>
+          <div class="timer-chip" aria-label="本局用时"><strong id="hud-timer">00:00</strong><small>本局用时</small></div>
           </div>
           <div class="stats" aria-live="polite">
             <div class="difficulty-stepper" aria-label="难度等级">
@@ -435,14 +96,14 @@
                 <i data-lucide="chevron-right"></i>
               </button>
             </div>
-            <span class="chip">剩余 <strong id="hud-left">0</strong></span>
-            <span class="chip stars" id="hud-stars">---</span>
+            <span class="chip remaining">剩余 <strong id="hud-left">0</strong></span>
           </div>
+          <div class="meta-row"><span id="hud-dimensions">尺寸 4 × 4 × 4</span><span class="stars" id="hud-stars">---</span></div>
         </header>
         <footer class="toolbar">
           <button class="tool-button" id="hud-reset" type="button">
             <i data-lucide="refresh-ccw"></i>
-            <span class="tool-copy"><b>重置</b><span id="hud-reset-count">不限</span></span>
+            <span class="tool-copy"><b>重置</b><span id="hud-reset-count">重新开始</span></span>
           </button>
           <button class="tool-button" id="hud-undo" type="button">
             <i data-lucide="undo-2"></i>
@@ -456,6 +117,7 @@
             <i data-lucide="play"></i>
             <span class="tool-copy"><b>自动</b><span id="hud-auto-state">关闭</span></span>
           </button>
+          <span class="gesture-hint">拖动自由旋转 · 双指缩放</span>
         </footer>
       </div>
       <div class="zoom-controls" aria-label="缩放">

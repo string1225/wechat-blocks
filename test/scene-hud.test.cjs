@@ -13,7 +13,7 @@ const { CubeGrid, BLOCK_SIZE } = require("../src/world/CubeGrid.ts");
 const { getLevelConfig } = require("../src/data/levels.ts");
 const { createTextureCanvas } = require("../src/platform/canvas.ts");
 const state = { autoRunning: false, canUndo: true, level: 1, bombArmed: false, bombTarget: null, maxMoves: 72,
-  moves: 2, phase: "playing", powerups: { undo: 5, bomb: 3 }, remaining: 62, stars: 3 };
+  dimensions: { x: 4, y: 4, z: 4 }, elapsedSeconds: 0, moves: 2, phase: "playing", powerups: { undo: 5, bomb: 3 }, remaining: 62, stars: 3 };
 function canvas() {
   const context = new Proxy({}, { get: (target, name) => target[name] ?? (() => {}) });
   return { width: 0, height: 0, getContext: () => context };
@@ -200,5 +200,49 @@ test("bomb confirmation consumes background clicks and targets the confirm/cance
   for (const action of ["bombConfirm", "bombCancel"]) {
     const button = elements.find(e => e.action === action);
     assert.equal(hud.pick(button.x + 10, button.y + 10), action);
+  }
+});
+
+test("horizontal drags stay screen-relative upright, inverted and across both poles", t => {
+  const { scene } = sceneFixture(t);
+  for (let i = 0; i < 16; i++) {
+    scene.rotate(0, Math.PI / 8 / 0.005);
+    const before = scene.camera.quaternion.clone();
+    scene.rotate(10, 0);
+    const localDelta = before.clone().invert().multiply(scene.camera.quaternion);
+    const expected = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -0.06);
+    assert.ok(localDelta.angleTo(expected) < 1e-6, "horizontal rotation must use screen up, regardless of inversion");
+  }
+});
+
+test("default framing fits 90 percent of portrait width and clears both toolbars", t => {
+  const { scene } = sceneFixture(t);
+  for (const [width, height] of [[294, 640], [375, 812], [430, 932], [812, 375]]) {
+    scene.canvas.clientWidth = width; scene.canvas.clientHeight = height; scene.resize();
+    for (const level of [1, 3, 101, 121]) {
+      const grid = new CubeGrid(getLevelConfig(level)); scene.loadBlocks(grid.blocks, grid.dimensions);
+      const corners = [];
+      for (const x of [-1, 1]) for (const y of [-1, 1]) for (const z of [-1, 1]) {
+        corners.push(new THREE.Vector3(x * grid.dimensions.x, y * grid.dimensions.y, z * grid.dimensions.z)
+          .multiplyScalar(BLOCK_SIZE / 2).add(scene.target).project(scene.camera));
+      }
+      const x = corners.map(p => (p.x + 1) * width / 2), y = corners.map(p => (1 - p.y) * height / 2);
+      assert.ok(Math.min(...x) >= width * .05 - .01 && Math.max(...x) <= width * .95 + .01);
+      if (height > width) assert.ok((Math.max(...x) - Math.min(...x)) / width > .85, "portrait board fills approximately 90% width");
+      assert.ok(Math.min(...y) >= 14 + 148 - .01);
+      assert.ok(Math.max(...y) <= height - 18 - 108 + .01);
+    }
+  }
+});
+
+test("auto uses an active color only while running and timer updates reuse unchanged controls", t => {
+  textureRuntime(t);
+  const hud = new SceneHud(); hud.update(375, 812, state);
+  const original = [...hud.scene.children];
+  hud.update(375, 812, { ...state, elapsedSeconds: 1 });
+  assert.equal(original.filter(m => !hud.scene.children.includes(m)).length, 1, "only timer texture changes");
+  for (const enabled of [false, true, false]) {
+    const auto = layoutSceneHud(375, 812, { ...state, autoRunning: enabled }).find(e => e.action === "auto");
+    assert.equal(auto.active, enabled); assert.equal(auto.icon, enabled ? "pause" : "play");
   }
 });

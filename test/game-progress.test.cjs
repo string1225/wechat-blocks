@@ -12,17 +12,21 @@ const { compactGrid } = require("../src/progress/schema.ts");
 const { getLevelConfig } = require("../src/data/levels.ts");
 
 function createGame(saved = null) {
-  const store = { current: saved, saves: [], async connect() { return this.current; },
+  const clock = { value: 0 }, lifecycle = {};
+  const store = { current: saved, saves: [], flush() {}, async connect() { return this.current; },
     save(p) { this.current = p; this.saves.push(p); } };
   const module = { exports: {} };
   const ui = { hideResult() {}, showToast() {}, update(s) { this.state = s; }, showResult(s) { this.result = s; } };
   let scene;
   vm.runInNewContext(compile(readFileSync("src/game/Game.ts", "utf8")), {
     module, exports: module.exports, console, requestAnimationFrame() {},
+    wx: { onHide(fn) { lifecycle.hide = fn; }, onShow(fn) { lifecycle.show = fn; } },
     require(name) {
+      if (name === "../platform/clock") return { now: () => clock.value };
       if (name === "../progress/ProgressStore") return { ProgressStore: class { constructor() { return store; } } };
       if (name === "./GameScene") return { GameScene: class {
         constructor() { scene = this; this.blocked = []; }
+        render() {} samplePixels() { return {}; }
         loadBlocks() {} updateBlocks() {} setHudState(s) { this.state = s; }
         setBombTarget(id) { this.target = id; }
         showBlocked(block) { this.blocked.push(block.instanceId); }
@@ -34,7 +38,7 @@ function createGame(saved = null) {
     }
   });
   const game = new module.exports.Game({}, ui);
-  return { game, ui, store, scene };
+  return { game, ui, store, scene, clock, lifecycle };
 }
 
 function bomb(fixture, id = 0) {
@@ -172,7 +176,7 @@ test("the final targeted bomb wins and level ten continues to eleven after reope
   assert.equal(fixture.scene.state.phase, "won");
   const old = { ...fixture.store.current, version: 1, level: 10 };
   const reopened = createGame(old); reopened.game.start(); await Promise.resolve();
-  assert.equal(reopened.store.current.version, 2);
+  assert.equal(reopened.store.current.version, 3);
   assert.equal(reopened.store.current.level, 11);
   reopened.game.nextLevel();
   assert.equal(reopened.store.current.level, 12);
@@ -187,7 +191,36 @@ test("unfinished legacy progress keeps the original board until the next level",
   assert.equal(store.current.version, 1);
   assert.deepEqual(JSON.parse(JSON.stringify(store.current.blocks)), original.blocks);
   game.nextLevel();
-  assert.equal(store.current.version, 2);
+  assert.equal(store.current.version, 3);
   assert.equal(store.current.level, 3);
   assert.equal(store.current.blocks.length, 100);
+});
+
+test("timer counts active wall time, saves idle time, excludes background and survives restore/undo", async () => {
+  const f = createGame(); f.game.start(); await Promise.resolve();
+  f.clock.value = 16000; f.game.tick(16000);
+  assert.equal(f.ui.state.elapsedSeconds, 16);
+  assert.equal(f.store.current.elapsedMs, 16000, "idle time is periodically saved");
+  f.clock.value = 17500; f.lifecycle.hide();
+  assert.equal(f.store.current.elapsedMs, 17500);
+  f.clock.value = 100000; f.game.tick(100000);
+  assert.equal(f.game.elapsedMs, 17500);
+  f.lifecycle.show(); f.clock.value += 2500; f.game.tick(102500);
+  bomb(f); f.game.undo();
+  assert.equal(f.store.current.elapsedMs, 20000, "undo must not refund time");
+  const restored = createGame(f.store.current); restored.game.start(); await Promise.resolve();
+  assert.equal(restored.ui.state.elapsedSeconds, 20);
+  restored.game.phase = "won"; restored.clock.value += 10000; restored.game.tick(10000);
+  assert.equal(restored.game.elapsedMs, 20000);
+  restored.game.nextLevel();
+  assert.equal(restored.store.current.elapsedMs, 0);
+});
+
+test("unfinished version-two level 101 retains 9 cubed until reset adopts the new gradient", async () => {
+  const original = { version: 2, level: 101, moves: 0, phase: "playing", powerups: { bomb: 3, undo: 5 },
+    blocks: compactGrid(new CubeGrid(getLevelConfig(101, 2)).snapshot()), history: [] };
+  const { game, store } = createGame(original); game.start(); await Promise.resolve();
+  assert.equal(game.grid.activeCount, 729); assert.equal(store.current.version, 2);
+  assert.equal(store.current.elapsedMs, 0);
+  game.resetLevel(); assert.equal(game.grid.activeCount, 810); assert.equal(store.current.version, 3);
 });
