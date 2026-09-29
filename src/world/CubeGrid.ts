@@ -321,9 +321,10 @@ export class CubeGrid {
     this.positions.clear();
 
     for (const block of this.blocks) {
-      if (block.active && !block.flying) {
-        this.positions.set(positionKey(block.grid), block);
-      }
+      if (!block.active || block.flight?.exitBoard) continue;
+      // A sliding block reserves its destination immediately. Following taps
+      // can use vacated cells without ever landing inside another moving block.
+      this.positions.set(positionKey(block.flight?.finalGrid ?? block.grid), block);
     }
   }
 }

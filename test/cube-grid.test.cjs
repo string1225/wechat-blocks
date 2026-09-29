@@ -53,6 +53,30 @@ test("all six faces click toward the block flight direction", () => {
   }
 });
 
+test("a sliding block reserves its destination for rapid following taps", () => {
+  const grid = createGrid();
+  const saved = grid.snapshot();
+  for (const b of saved.blocks) b.active = false;
+  for (const [id, x] of [[0, 0], [1, 1], [2, 3]]) {
+    saved.blocks[id].active = true; saved.blocks[id].grid = { x, y: 0, z: 0 };
+  }
+  grid.restore(saved);
+  const direction = { x: 1, y: 0, z: 0 };
+  assert.equal(grid.beginFlight(grid.blocks[1], direction), true);
+  assert.deepEqual(grid.blocks[1].flight.finalGrid, { x: 2, y: 0, z: 0 });
+  assert.equal(grid.beginFlight(grid.blocks[0], direction), true);
+  assert.deepEqual(grid.blocks[0].flight.finalGrid, { x: 1, y: 0, z: 0 });
+  const positions = grid.settledSnapshot().blocks.filter(b => b.active).map(b => JSON.stringify(b.grid));
+  assert.equal(new Set(positions).size, 3);
+  grid.update(1);
+  assert.equal(grid.canMove(grid.blocks[0], direction), false);
+  assert.equal(grid.beginFlight(grid.blocks[2], direction), true);
+  assert.equal(grid.beginFlight(grid.blocks[1], direction), true);
+  assert.equal(grid.beginFlight(grid.blocks[0], direction), true);
+  grid.update(1);
+  assert.equal(grid.activeCount, 0);
+});
+
 function createGrid() {
   return new CubeGrid({
     id: 1,

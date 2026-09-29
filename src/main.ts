@@ -27,11 +27,9 @@ function createRuntime(): { canvas: HTMLCanvasElement; sceneHud: boolean; ui: Ga
       throw new Error("Missing browser canvas.");
     }
 
-    return {
-      canvas,
-      sceneHud: false,
-      ui: new BrowserHud()
-    };
+    const sceneHud = typeof location !== "undefined" && new URLSearchParams(location.search).get("sceneHud") === "1";
+    if (sceneHud) document.body.classList.add("scene-hud-preview");
+    return { canvas, sceneHud, ui: sceneHud ? new NoopHud() : new BrowserHud() };
   }
 
   const maybeWx = typeof wx !== "undefined" ? wx : undefined;

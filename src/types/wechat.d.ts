@@ -1,6 +1,7 @@
 declare const wx:
   | {
       createCanvas?: () => HTMLCanvasElement;
+      createOffscreenCanvas?: (options: { type: "2d"; width: number; height: number }) => HTMLCanvasElement;
       getMenuButtonBoundingClientRect?: () => WechatMenuButtonRect;
       getSystemInfoSync?: () => WechatSystemInfo;
       getStorageSync?: (key: string) => unknown;

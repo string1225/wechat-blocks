@@ -1,4 +1,5 @@
 import { createIcons, icons } from "lucide";
+import { LEVEL_COUNT } from "../data/levels";
 import type { GameUi, ResultState, UiHandlers, UiState } from "./GameUi";
 
 export class BrowserHud implements GameUi {
@@ -87,12 +88,12 @@ export class BrowserHud implements GameUi {
   }
 
   showResult(result: ResultState): void {
-    this.resultTitle.textContent = result.phase === "won" ? "过关" : "未完成";
+    this.resultTitle.textContent = result.phase === "won" ? (result.level >= LEVEL_COUNT ? "全部通关" : "过关") : "未完成";
     this.resultCopy.textContent =
       result.phase === "won"
         ? `难度 ${result.level} · ${result.moves} 步 · ${renderStars(result.stars)}`
         : `难度 ${result.level} · ${result.moves} 步`;
-    this.resultNext.disabled = result.phase !== "won";
+    this.resultNext.disabled = result.phase !== "won" || result.level >= LEVEL_COUNT;
     this.result.dataset.visible = "true";
   }
 

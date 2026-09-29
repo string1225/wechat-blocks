@@ -101,7 +101,7 @@ export class Game {
   }
 
   undo(): void {
-    if (!this.ready || this.phase !== "playing" || this.grid.isAnimating() || this.powerups.undo <= 0) {
+    if (!this.ready || this.phase !== "playing" || this.powerups.undo <= 0) {
       return;
     }
 
@@ -111,6 +111,7 @@ export class Game {
     }
 
     this.powerups.undo -= 1;
+    this.autoRunning = false;
     this.moves = snapshot.moves;
     this.grid.restore(snapshot.grid);
     this.scene.updateBlocks(this.grid.blocks);
@@ -120,7 +121,7 @@ export class Game {
   }
 
   useBomb(): void {
-    if (!this.ready || this.phase !== "playing" || this.grid.isAnimating() || this.powerups.bomb <= 0) {
+    if (!this.ready || this.phase !== "playing" || this.powerups.bomb <= 0) {
       return;
     }
 
@@ -133,7 +134,6 @@ export class Game {
       return;
     }
 
-    this.powerups.bomb -= 1;
     this.flyBlock(target, this.pickAutoDirection(target), "Bomb");
   }
 
@@ -169,7 +169,7 @@ export class Game {
     }
 
     this.runAuto(dt);
-    this.scene.render();
+    this.scene.render(dt);
     this.publishDebug(dt);
     requestAnimationFrame(this.tick);
   };
@@ -182,7 +182,7 @@ export class Game {
       return;
     }
 
-    if (this.phase !== "playing" || this.grid.isAnimating()) {
+    if (this.phase !== "playing") {
       return;
     }
 
@@ -203,16 +203,17 @@ export class Game {
   }
 
   private flyBlock(block: GridBlock, direction: Position3, source: FlightSource): boolean {
-    if (this.phase !== "playing") {
+    if (this.phase !== "playing" || this.moves >= this.level.maxMoves) {
       return false;
     }
 
     const snapshot: TurnSnapshot = {
-      grid: this.grid.snapshot(),
+      grid: this.grid.settledSnapshot(),
       moves: this.moves
     };
 
     if (!this.grid.beginFlight(block, direction)) {
+      if (source === "Fly") this.scene.showBlocked(block);
       return false;
     }
 
@@ -220,6 +221,7 @@ export class Game {
     this.history = this.history.slice(-30);
     this.moves += 1;
     if (source === "Bomb") {
+      this.powerups.bomb -= 1;
       this.ui.showToast("Bomb");
     }
     this.updateUi();
@@ -315,7 +317,7 @@ export class Game {
   }
 
   private checkProgress(): void {
-    if (this.phase !== "playing") {
+    if (this.phase !== "playing" || this.grid.isAnimating()) {
       return;
     }
 

@@ -12,6 +12,7 @@ interface PointerRecord {
   startX: number;
   startY: number;
   startedAt: number;
+  moved: boolean;
 }
 
 export class InputController {
@@ -26,7 +27,7 @@ export class InputController {
     this.canvas.addEventListener("pointerdown", this.handlePointerDown);
     this.canvas.addEventListener("pointermove", this.handlePointerMove);
     this.canvas.addEventListener("pointerup", this.handlePointerUp);
-    this.canvas.addEventListener("pointercancel", this.handlePointerUp);
+    this.canvas.addEventListener("pointercancel", this.handlePointerCancel);
     this.canvas.addEventListener("wheel", this.handleWheel, { passive: false });
   }
 
@@ -34,7 +35,7 @@ export class InputController {
     this.canvas.removeEventListener("pointerdown", this.handlePointerDown);
     this.canvas.removeEventListener("pointermove", this.handlePointerMove);
     this.canvas.removeEventListener("pointerup", this.handlePointerUp);
-    this.canvas.removeEventListener("pointercancel", this.handlePointerUp);
+    this.canvas.removeEventListener("pointercancel", this.handlePointerCancel);
     this.canvas.removeEventListener("wheel", this.handleWheel);
   }
 
@@ -45,7 +46,8 @@ export class InputController {
       y: event.clientY,
       startX: event.clientX,
       startY: event.clientY,
-      startedAt: now()
+      startedAt: now(),
+      moved: false
     });
 
     if (this.pointers.size >= 2) {
@@ -64,6 +66,7 @@ export class InputController {
     const deltaY = event.clientY - pointer.y;
     pointer.x = event.clientX;
     pointer.y = event.clientY;
+    pointer.moved ||= Math.hypot(pointer.x - pointer.startX, pointer.y - pointer.startY) >= 7;
 
     if (this.pointers.size >= 2) {
       const nextDistance = this.getPinchDistance();
@@ -74,7 +77,7 @@ export class InputController {
       return;
     }
 
-    if (Math.abs(deltaX) + Math.abs(deltaY) > 0.5) {
+    if (pointer.moved && Math.abs(deltaX) + Math.abs(deltaY) > 0.5) {
       this.handlers.onRotate(deltaX, deltaY);
     }
   };
@@ -90,16 +93,23 @@ export class InputController {
 
     const travel = Math.hypot(event.clientX - pointer.startX, event.clientY - pointer.startY);
     const duration = now() - pointer.startedAt;
-    const isTap = travel < 7 && duration < 360 && !this.hadMultiTouch;
+    const isTap = travel < 7 && duration < 360 && !pointer.moved && !this.hadMultiTouch;
 
     if (isTap) {
       this.handlers.onTap(event.clientX, event.clientY);
     }
 
-    if (this.pointers.size < 2) {
+    if (this.pointers.size === 0) {
       this.pinchDistance = 0;
       this.hadMultiTouch = false;
     }
+  };
+
+  private readonly handlePointerCancel = (event: PointerEvent): void => {
+    this.pointers.delete(event.pointerId);
+    this.canvas.releasePointerCapture?.(event.pointerId);
+    this.pinchDistance = 0;
+    if (this.pointers.size === 0) this.hadMultiTouch = false;
   };
 
   private readonly handleWheel = (event: WheelEvent): void => {

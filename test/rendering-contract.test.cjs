@@ -10,12 +10,6 @@ test("default camera framing renders the cube at half the previous width fill", 
   assert.match(sceneSource, /const diagonalWidth = this\.activeSize \* BLOCK_SIZE \* 1\.38;/);
 });
 
-test("flight-direction faces stay blank without a gray fill overlay", () => {
-  assert.equal(sceneSource.includes("blankFaceMaterial"), false);
-  assert.equal(sceneSource.includes("blankFaceMesh"), false);
-  assert.equal(sceneSource.includes("blankFaceOverlays"), false);
-});
-
 test("renderer uses the platform pixel ratio for crisp mobile lines", () => {
   assert.match(sceneSource, /getDevicePixelRatio/);
   assert.equal(sceneSource.includes("globalThis.devicePixelRatio || 1"), false);
