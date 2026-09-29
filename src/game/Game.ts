@@ -1,4 +1,4 @@
-import { LEVEL_COUNT, getLevelConfig } from "../data/levels";
+import { getLevelConfig } from "../data/levels";
 import { chooseBestBlock } from "../systems/solver";
 import type { GameUi, UiState } from "../ui/GameUi";
 import { CubeGrid, type GridBlock } from "../world/CubeGrid";
@@ -9,7 +9,7 @@ import { ProgressStore } from "../progress/ProgressStore";
 import { compactGrid, expandGrid, type GameProgress } from "../progress/schema";
 import type { GamePhase, LevelConfig, Position3, PowerupState, TurnSnapshot } from "./types";
 
-type FlightSource = "Fly" | "Bomb" | "Silent";
+type FlightSource = "Fly" | "Silent";
 
 export interface GameOptions {
   sceneHud?: boolean;
@@ -25,6 +25,8 @@ export class Game {
   private powerups: PowerupState = { undo: 5, bomb: 3 };
   private history: TurnSnapshot[] = [];
   private autoRunning = false;
+  private bombArmed = false;
+  private bombTarget: number | null = null;
   private autoCooldown = 0;
   private lastTime = 0;
   private resultShown = false;
@@ -40,8 +42,8 @@ export class Game {
     this.scene = new GameScene(canvas, { sceneHud: options.sceneHud ?? false });
     this.input = new InputController(canvas, {
       onTap: (clientX, clientY) => this.handleTap(clientX, clientY),
-      onRotate: (deltaX, deltaY) => this.scene.rotate(deltaX, deltaY),
-      onZoom: (scale) => this.scene.zoom(scale)
+      onRotate: (deltaX, deltaY) => { if (this.bombTarget === null) this.scene.rotate(deltaX, deltaY); },
+      onZoom: (scale) => { if (this.bombTarget === null) this.scene.zoom(scale); }
     });
 
     if (typeof window !== "undefined") {
@@ -80,10 +82,12 @@ export class Game {
     this.powerups = { undo: 5, bomb: 3 };
     this.history = [];
     this.autoRunning = false;
+    this.bombArmed = false;
+    this.bombTarget = null;
     this.autoCooldown = 0;
     this.resultShown = false;
     this.ui.hideResult();
-    this.scene.loadBlocks(this.grid.blocks, this.level.size);
+    this.scene.loadBlocks(this.grid.blocks, this.level.dimensions);
     this.updateUi();
   }
 
@@ -92,11 +96,6 @@ export class Game {
   }
 
   nextLevel(): void {
-    if (this.level.id >= LEVEL_COUNT) {
-      this.ui.showToast("Last level");
-      return;
-    }
-
     this.loadLevel(this.level.id + 1);
   }
 
@@ -112,6 +111,7 @@ export class Game {
 
     this.powerups.undo -= 1;
     this.autoRunning = false;
+    this.clearBombSelection();
     this.moves = snapshot.moves;
     this.grid.restore(snapshot.grid);
     this.scene.updateBlocks(this.grid.blocks);
@@ -125,16 +125,41 @@ export class Game {
       return;
     }
 
-    const movableBlocks = this.grid.activeBlocks.filter((block) =>
-      block.faceArrows.some((arrow) => this.grid.canExit(block, arrow.direction))
-    );
-    const target = movableBlocks[Math.floor(Math.random() * movableBlocks.length)];
-    if (!target) {
-      this.ui.showToast("Blocked");
-      return;
-    }
+    this.autoRunning = false;
+    this.bombArmed = !this.bombArmed;
+    this.bombTarget = null;
+    this.scene.setBombTarget(null);
+    this.updateUi();
+  }
 
-    this.flyBlock(target, this.pickAutoDirection(target), "Bomb");
+  cancelBomb(): void {
+    this.bombTarget = null;
+    this.scene.setBombTarget(null);
+    this.updateUi();
+  }
+
+  confirmBomb(): void {
+    if (!this.ready || this.phase !== "playing" || !this.bombArmed || this.bombTarget === null
+      || this.powerups.bomb <= 0 || this.moves >= this.level.maxMoves) return;
+    const block = this.grid.getBlockByInstanceId(this.bombTarget);
+    if (!block) { this.cancelBomb(); return; }
+    const snapshot = { grid: this.grid.settledSnapshot(), moves: this.moves };
+    if (!this.grid.removeBlock(block)) return;
+    this.history.push(snapshot);
+    this.history = this.history.slice(-5);
+    this.moves += 1;
+    this.powerups.bomb -= 1;
+    this.clearBombSelection();
+    this.scene.updateBlocks(this.grid.blocks);
+    this.checkProgress();
+    this.updateUi();
+    this.saveProgress();
+  }
+
+  private clearBombSelection(): void {
+    this.bombArmed = false;
+    this.bombTarget = null;
+    this.scene.setBombTarget(null);
   }
 
   toggleAuto(): void {
@@ -143,6 +168,7 @@ export class Game {
     }
 
     this.autoRunning = !this.autoRunning;
+    this.clearBombSelection();
     this.autoCooldown = 0;
     this.updateUi();
   }
@@ -182,7 +208,7 @@ export class Game {
       return;
     }
 
-    if (this.phase !== "playing") {
+    if (this.phase !== "playing" || this.bombTarget !== null) {
       return;
     }
 
@@ -193,6 +219,13 @@ export class Game {
 
     const block = this.grid.getBlockByInstanceId(pick.instanceId);
     if (!block) {
+      return;
+    }
+
+    if (this.bombArmed) {
+      this.bombTarget = block.instanceId;
+      this.scene.setBombTarget(block.instanceId);
+      this.updateUi();
       return;
     }
 
@@ -218,12 +251,8 @@ export class Game {
     }
 
     this.history.push(snapshot);
-    this.history = this.history.slice(-30);
+    this.history = this.history.slice(-5);
     this.moves += 1;
-    if (source === "Bomb") {
-      this.powerups.bomb -= 1;
-      this.ui.showToast("Bomb");
-    }
     this.updateUi();
     this.saveProgress();
     return true;
@@ -233,15 +262,16 @@ export class Game {
     if (!this.ready) return;
     const blocks = compactGrid(this.grid.settledSnapshot());
     this.progress.save({
-      version: 1, level: this.level.id, moves: this.moves,
+      version: this.level.layoutVersion, level: this.level.id, moves: this.moves,
       phase: blocks.length === 0 ? "won" : this.moves >= this.level.maxMoves ? "failed" : "playing",
       blocks, powerups: { ...this.powerups },
-      history: this.history.map((turn) => ({ moves: turn.moves, blocks: compactGrid(turn.grid) }))
+      history: (this.powerups.undo > 0 ? this.history.slice(-this.powerups.undo) : [])
+        .map((turn) => ({ moves: turn.moves, blocks: compactGrid(turn.grid) }))
     });
   }
 
   private restoreProgress(saved: GameProgress): void {
-    if (saved.phase === "won" && saved.level < LEVEL_COUNT) {
+    if (saved.phase === "won") {
       this.setLevel(saved.level + 1);
       this.saveProgress();
       return;
@@ -251,7 +281,7 @@ export class Game {
       this.saveProgress();
       return;
     }
-    this.level = getLevelConfig(saved.level);
+    this.level = getLevelConfig(saved.level, saved.version);
     this.grid = new CubeGrid(this.level);
     const template = this.grid.snapshot();
     this.grid.restore(expandGrid(saved.blocks, template));
@@ -260,12 +290,13 @@ export class Game {
     this.powerups = { ...saved.powerups };
     this.history = saved.history.map((turn) => ({ moves: turn.moves, grid: expandGrid(turn.blocks, template) }));
     this.autoRunning = false;
+    this.bombArmed = false;
+    this.bombTarget = null;
     this.autoCooldown = 0;
     this.resultShown = false;
     this.ui.hideResult();
-    this.scene.loadBlocks(this.grid.blocks, this.level.size);
+    this.scene.loadBlocks(this.grid.blocks, this.level.dimensions);
     this.updateUi();
-    if (this.phase === "won") this.showResultOnce();
   }
 
   private handleHudAction(action: string): void {
@@ -275,6 +306,12 @@ export class Game {
         return;
       case "bomb":
         this.useBomb();
+        return;
+      case "bombConfirm":
+        this.confirmBomb();
+        return;
+      case "bombCancel":
+        this.cancelBomb();
         return;
       case "levelNext":
         this.nextLevel();
@@ -354,7 +391,8 @@ export class Game {
       autoRunning: this.autoRunning,
       canUndo: this.history.length > 0 && this.powerups.undo > 0,
       level: this.level.id,
-      levelCount: LEVEL_COUNT,
+      bombArmed: this.bombArmed,
+      bombTarget: this.bombTarget === null ? null : this.grid.blocks[this.bombTarget]!.grid,
       maxMoves: this.level.maxMoves,
       moves: this.moves,
       phase: this.phase,

@@ -45,12 +45,14 @@ const FACE_NORMALS: readonly Position3[] = [
 export class CubeGrid {
   readonly gap = BLOCK_SIZE;
   readonly size: number;
+  readonly dimensions: Position3;
   readonly blocks: GridBlock[];
 
   private readonly positions = new Map<string, GridBlock>();
 
   constructor(level: LevelConfig) {
     this.size = level.size;
+    this.dimensions = level.dimensions;
     this.blocks = this.createBlocks(level);
     this.rebuildPositionIndex();
   }
@@ -188,6 +190,15 @@ export class CubeGrid {
     };
   }
 
+  removeBlock(block: GridBlock): boolean {
+    if (!block.active || block.flying) return false;
+    block.active = false;
+    block.scale = 0;
+    block.flight = null;
+    this.rebuildPositionIndex();
+    return true;
+  }
+
   settledSnapshot(): GridSnapshot {
     const snapshot = this.snapshot();
     for (const saved of snapshot.blocks) {
@@ -230,24 +241,25 @@ export class CubeGrid {
   }
 
   toWorld(position: Position3): THREE.Vector3 {
-    const center = (this.size - 1) / 2;
     return new THREE.Vector3(
-      (position.x - center) * this.gap,
+      (position.x - (this.dimensions.x - 1) / 2) * this.gap,
       position.y * this.gap,
-      (position.z - center) * this.gap
+      (position.z - (this.dimensions.z - 1) / 2) * this.gap
     );
   }
 
   private createBlocks(level: LevelConfig): GridBlock[] {
     for (let attempt = 0; attempt < 12; attempt += 1) {
       const rng = createRng(level.seed + attempt * 7919);
-      const arrowsByPosition = createSolvableFaceArrowMap(level.size, rng);
+      const arrowsByPosition = level.layoutVersion === 1
+        ? createSolvableFaceArrowMap(level.size, rng)
+        : createGrowingArrowMap(this.dimensions, rng);
       const blocks: GridBlock[] = [];
       let instanceId = 0;
 
-      for (let x = 0; x < level.size; x += 1) {
-        for (let y = 0; y < level.size; y += 1) {
-          for (let z = 0; z < level.size; z += 1) {
+      for (let x = 0; x < this.dimensions.x; x += 1) {
+        for (let y = 0; y < this.dimensions.y; y += 1) {
+          for (let z = 0; z < this.dimensions.z; z += 1) {
             const grid = { x, y, z };
             const faceArrows = arrowsByPosition.get(positionKey(grid));
             if (!faceArrows) {
@@ -271,7 +283,7 @@ export class CubeGrid {
         }
       }
 
-      if (validateSolvable(blocks, level.size)) {
+      if (level.layoutVersion === 2 || validateSolvable(blocks, level.size)) {
         return blocks;
       }
     }
@@ -309,11 +321,11 @@ export class CubeGrid {
   private isInside(position: Position3): boolean {
     return (
       position.x >= 0 &&
-      position.x < this.size &&
+      position.x < this.dimensions.x &&
       position.y >= 0 &&
-      position.y < this.size &&
+      position.y < this.dimensions.y &&
       position.z >= 0 &&
-      position.z < this.size
+      position.z < this.dimensions.z
     );
   }
 
@@ -378,6 +390,52 @@ function normalizeGridDirection(position: Position3): Position3 {
 
 function positionToVector(position: Position3): THREE.Vector3 {
   return new THREE.Vector3(position.x, position.y, position.z).normalize();
+}
+
+function createGrowingArrowMap(dimensions: Position3, rng: () => number): Map<string, FaceArrow[]> {
+  const { x: width, y: height, z: depth } = dimensions;
+  const count = width * height * depth;
+  const occupied = new Uint8Array(count).fill(1), masks = new Uint8Array(count);
+  const positions: Position3[] = [], candidates: number[] = [];
+  const arrows = new Map<string, FaceArrow[]>();
+  const index = (p: Position3): number => (p.x * height + p.y) * depth + p.z;
+  const inside = (p: Position3): boolean => p.x >= 0 && p.x < width && p.y >= 0 && p.y < height && p.z >= 0 && p.z < depth;
+  const expose = (id: number, direction: number): void => {
+    if (occupied[id] && !(masks[id]! & (1 << direction))) {
+      masks[id]! |= 1 << direction;
+      candidates.push(id * 6 + direction);
+    }
+  };
+  for (let x = 0; x < width; x++) for (let y = 0; y < height; y++) for (let z = 0; z < depth; z++) {
+    const position = { x, y, z }, id = index(position);
+    positions.push(position);
+    FACE_NORMALS.forEach((direction, d) => { if (!inside(addPosition(position, direction))) expose(id, d); });
+  }
+  // Remove a random block whose arrow already has a clear ray out. Newly
+  // exposed rays are queued once, giving a constructive solution without
+  // rescanning every occupied cell for every removal on large boards.
+  while (candidates.length) {
+    const choice = Math.floor(rng() * candidates.length), encoded = candidates[choice]!;
+    candidates[choice] = candidates[candidates.length - 1]!; candidates.pop();
+    const id = Math.floor(encoded / 6);
+    if (!occupied[id]) continue;
+    occupied[id] = 0;
+    const position = positions[id]!, direction = FACE_NORMALS[encoded % 6]!;
+    arrows.set(positionKey(position), FACE_NORMALS.filter(normal => dot(normal, direction) === 0)
+      .map(normal => ({ normal: { ...normal }, direction: { ...direction } })));
+    FACE_NORMALS.forEach((outward, d) => {
+      if (!(masks[id]! & (1 << d))) return;
+      const inward = { x: -outward.x, y: -outward.y, z: -outward.z };
+      let cursor = addPosition(position, inward);
+      while (inside(cursor)) {
+        const next = index(cursor);
+        if (occupied[next]) { expose(next, d); break; }
+        cursor = addPosition(cursor, inward);
+      }
+    });
+  }
+  if (arrows.size !== count) throw new Error("Generated arrow graph is incomplete.");
+  return arrows;
 }
 
 function createSolvableFaceArrowMap(size: number, rng: () => number): Map<string, FaceArrow[]> {

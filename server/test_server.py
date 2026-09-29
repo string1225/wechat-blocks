@@ -7,7 +7,7 @@ import urllib.request
 from pathlib import Path
 from unittest.mock import patch
 
-from server import ApiServer, Database, valid_progress
+from server import ApiServer, Database, valid_progress, level_dimensions, MAX_BODY
 
 
 def sample():
@@ -16,6 +16,24 @@ def sample():
 
 
 class ProgressTests(unittest.TestCase):
+    def test_growing_levels_match_client_gradient_and_round_trip(self):
+        table = json.loads((Path(__file__).parent.parent / "test/fixtures/difficulty.json").read_text())
+        for row in table:
+            dimensions = (row["x"], row["y"], row["z"])
+            self.assertEqual(level_dimensions(row["level"], 2), dimensions)
+            progress = {**sample(), "version": 2, "level": row["level"],
+                        "blocks": [[0, row["x"] - 1, row["y"] - 1, row["z"] - 1]]}
+            self.assertTrue(valid_progress(progress))
+            progress["blocks"][0][2] = row["y"]
+            self.assertFalse(valid_progress(progress))
+        _, session = self.request("/session/guest", "POST")
+        progress = {**sample(), "version": 2, "level": 1000, "blocks": [[1727, 11, 11, 11]]}
+        self.assertEqual(self.request("/progress", "PUT", session["token"],
+                                     {"revision": 0, "mutation": "growing-level", "progress": progress})[0], 200)
+        self.assertEqual(self.request("/progress", token=session["token"])[1]["progress"], progress)
+        progress["version"] = 1
+        self.assertFalse(valid_progress(progress))
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.path = Path(self.temp.name) / "progress.sqlite3"
@@ -68,7 +86,11 @@ class ProgressTests(unittest.TestCase):
                                      {"revision": 0, "mutation": "bad-mutation", "progress": bad})[0], 400)
         self.assertEqual(self.request("/session/guest", "POST", headers={"Origin": "https://evil.example"})[0], 403)
         self.assertEqual(self.request("/session/wechat", "POST", body={"code": "code"})[0], 503)
-        self.assertEqual(self.request("/progress", "PUT", session["token"], {"x": "x" * (256 * 1024)})[0], 413)
+        import http.client
+        client = http.client.HTTPConnection("127.0.0.1", self.server.server_port)
+        client.request("PUT", "/progress", headers={"Content-Length": str(MAX_BODY + 1)})
+        self.assertEqual(client.getresponse().status, 413)
+        client.close()
 
     def test_wechat_exchanges_code_only_server_side_and_reuses_identity(self):
         self.server.appid, self.server.secret = "test-app", "server-only-secret"

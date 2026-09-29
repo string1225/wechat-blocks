@@ -11,7 +11,7 @@ const { CubeGrid } = require("../src/world/CubeGrid.ts");
 const { getLevelConfig } = require("../src/data/levels.ts");
 
 function sample(level = 1) {
-  return { version: 1, level, moves: 0, phase: "playing", powerups: { undo: 5, bomb: 3 },
+  return { version: 2, level, moves: 0, phase: "playing", powerups: { undo: 5, bomb: 3 },
     blocks: compactGrid(new CubeGrid(getLevelConfig(level)).snapshot()), history: [] };
 }
 function platform(initial = null) {

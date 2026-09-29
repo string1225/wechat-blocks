@@ -1,5 +1,4 @@
 import { createIcons, icons } from "lucide";
-import { LEVEL_COUNT } from "../data/levels";
 import type { GameUi, ResultState, UiHandlers, UiState } from "./GameUi";
 
 export class BrowserHud implements GameUi {
@@ -11,6 +10,8 @@ export class BrowserHud implements GameUi {
   private readonly reset = mustGet<HTMLButtonElement>("hud-reset");
   private readonly undo = mustGet<HTMLButtonElement>("hud-undo");
   private readonly bomb = mustGet<HTMLButtonElement>("hud-bomb");
+  private readonly bombDialog = mustGet<HTMLElement>("bomb-dialog");
+  private readonly bombHint = mustGet<HTMLElement>("bomb-hint");
   private readonly auto = mustGet<HTMLButtonElement>("hud-auto");
   private readonly zoomIn = mustGet<HTMLButtonElement>("hud-zoom-in");
   private readonly zoomOut = mustGet<HTMLButtonElement>("hud-zoom-out");
@@ -26,7 +27,6 @@ export class BrowserHud implements GameUi {
   private handlers: UiHandlers | null = null;
   private toastTimer = 0;
   private currentLevel = 1;
-  private currentLevelCount = 1;
 
   bind(handlers: UiHandlers): void {
     this.handlers = handlers;
@@ -36,13 +36,13 @@ export class BrowserHud implements GameUi {
       }
     });
     this.difficultyNext.addEventListener("click", () => {
-      if (this.currentLevel < this.currentLevelCount) {
-        handlers.onLevel(this.currentLevel + 1);
-      }
+      handlers.onLevel(this.currentLevel + 1);
     });
     this.reset.addEventListener("click", () => handlers.onReset());
     this.undo.addEventListener("click", () => handlers.onUndo());
     this.bomb.addEventListener("click", () => handlers.onBomb());
+    mustGet("bomb-confirm").addEventListener("click", () => handlers.onBombConfirm());
+    mustGet("bomb-cancel").addEventListener("click", () => handlers.onBombCancel());
     this.auto.addEventListener("click", () => handlers.onAuto());
     this.zoomIn.addEventListener("click", () => handlers.onZoomIn());
     this.zoomOut.addEventListener("click", () => handlers.onZoomOut());
@@ -53,16 +53,19 @@ export class BrowserHud implements GameUi {
 
   update(state: UiState): void {
     this.currentLevel = state.level;
-    this.currentLevelCount = state.levelCount;
 
     this.difficulty.textContent = String(state.level);
     this.left.textContent = String(state.remaining);
     this.stars.textContent = renderStars(state.stars);
     this.undoCount.textContent = String(state.powerups.undo);
-    this.bombCount.textContent = String(state.powerups.bomb);
+    this.bombCount.textContent = state.bombArmed ? "已选中" : String(state.powerups.bomb);
+    this.bomb.dataset.active = String(state.bombArmed);
+    this.bomb.setAttribute("aria-pressed", String(state.bombArmed));
+    this.bombDialog.dataset.visible = String(state.bombTarget !== null && state.phase === "playing");
+    this.bombHint.hidden = !state.bombArmed || state.phase !== "playing";
 
     this.difficultyPrev.disabled = state.level <= 1;
-    this.difficultyNext.disabled = state.level >= state.levelCount;
+    this.difficultyNext.disabled = false;
     this.undo.disabled = !state.canUndo || state.phase !== "playing";
     this.bomb.disabled = state.powerups.bomb <= 0 || state.remaining <= 0 || state.phase !== "playing";
     this.auto.disabled = state.remaining <= 0 || state.phase !== "playing";
@@ -88,12 +91,12 @@ export class BrowserHud implements GameUi {
   }
 
   showResult(result: ResultState): void {
-    this.resultTitle.textContent = result.phase === "won" ? (result.level >= LEVEL_COUNT ? "全部通关" : "过关") : "未完成";
+    this.resultTitle.textContent = result.phase === "won" ? "过关" : "未完成";
     this.resultCopy.textContent =
       result.phase === "won"
         ? `难度 ${result.level} · ${result.moves} 步 · ${renderStars(result.stars)}`
         : `难度 ${result.level} · ${result.moves} 步`;
-    this.resultNext.disabled = result.phase !== "won" || result.level >= LEVEL_COUNT;
+    this.resultNext.disabled = result.phase !== "won";
     this.result.dataset.visible = "true";
   }
 

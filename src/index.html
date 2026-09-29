@@ -9,7 +9,12 @@
       .scene-hud-preview #hud,
       .scene-hud-preview .zoom-controls,
       .scene-hud-preview #result,
+      .scene-hud-preview #bomb-dialog,
+      .scene-hud-preview #bomb-hint,
       .scene-hud-preview #toast { display: none; }
+      .bomb-hint { position: fixed; top: max(110px, calc(env(safe-area-inset-top) + 90px)); left: 50%; transform: translateX(-50%); padding: 10px 16px;
+        border-radius: 10px; background: #f1f3f8; color: #17202b; white-space: nowrap; font-size: 13px; pointer-events: none; }
+      #bomb-dialog { align-items: end; padding-bottom: 100px; backdrop-filter: none; background: rgba(12,18,40,0.45); }
       :root {
         color: #182024;
         font-family:
@@ -207,6 +212,7 @@
       }
 
       .toolbar {
+        grid-row: 3;
         display: grid;
         grid-template-columns: repeat(4, 1fr);
         gap: 10px;
@@ -461,6 +467,17 @@
         </button>
       </div>
       <div class="toast" id="toast"></div>
+      <div class="bomb-hint" id="bomb-hint" hidden>点选要炸的格子 · 再点炸弹可取消</div>
+      <section class="result" id="bomb-dialog" role="dialog" aria-modal="true" aria-labelledby="bomb-title">
+        <div class="result-panel">
+          <h1 id="bomb-title">炸掉这个格子？</h1>
+          <p>消耗 1 枚炸弹，只移除高亮的格子</p>
+          <div class="result-actions">
+            <button class="text-button secondary" id="bomb-cancel" type="button">取消</button>
+            <button class="text-button" id="bomb-confirm" type="button">确认炸掉</button>
+          </div>
+        </div>
+      </section>
       <section class="result" id="result">
         <div class="result-panel">
           <h1 id="result-title">过关</h1>

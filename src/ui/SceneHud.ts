@@ -3,7 +3,7 @@ import { createTextureCanvas } from "../platform/canvas";
 import { getDevicePixelRatio, getHudInsets } from "../platform/display";
 import type { UiState } from "./GameUi";
 
-export type SceneHudAction = "auto" | "bomb" | "levelNext" | "levelPrev" | "reset" | "undo" | "consume";
+export type SceneHudAction = "auto" | "bomb" | "bombConfirm" | "bombCancel" | "levelNext" | "levelPrev" | "reset" | "undo" | "consume";
 export interface HudElement {
   x: number; y: number; width: number; height: number;
   label: string; secondary?: string; disabled?: boolean;
@@ -19,7 +19,7 @@ export function layoutSceneHud(width: number, height: number, state: UiState): H
   const elements: HudElement[] = [
     { x: margin, y: top, width: 34, height: 38, label: "‹", action: "levelPrev", disabled: state.level <= 1 },
     { x: margin + 42, y: top, width: stepWidth, height: 38, label: `难度 ${state.level}` },
-    { x: margin + 50 + stepWidth, y: top, width: 34, height: 38, label: "›", action: "levelNext", disabled: state.level >= state.levelCount }
+    { x: margin + 50 + stepWidth, y: top, width: 34, height: 38, label: "›", action: "levelNext" }
   ];
   const statsWidth = 128;
   const statsInline = available >= stepWidth + 92 + statsWidth;
@@ -29,25 +29,39 @@ export function layoutSceneHud(width: number, height: number, state: UiState): H
   const buttonWidth = (barWidth - gap * 3) / 4;
   const barX = (width - barWidth) / 2;
   const barY = Math.max(top + 92, height - insets.bottom - 54);
-  const tools: Array<Pick<HudElement, "label" | "secondary" | "action" | "disabled">> = [
+  const tools: Array<Pick<HudElement, "label" | "secondary" | "action" | "disabled" | "role">> = [
     { label: "重置", secondary: "不限", action: "reset" },
     { label: "撤销", secondary: String(state.powerups.undo), action: "undo", disabled: !state.canUndo || state.phase !== "playing" },
-    { label: "炸弹", secondary: String(state.powerups.bomb), action: "bomb", disabled: state.powerups.bomb <= 0 || state.remaining <= 0 || state.phase !== "playing" },
+    { label: "炸弹", secondary: state.bombArmed ? "已选中" : String(state.powerups.bomb), action: "bomb", role: state.bombArmed ? "primary" : undefined,
+      disabled: state.powerups.bomb <= 0 || state.remaining <= 0 || state.phase !== "playing" },
     { label: "自动", secondary: state.autoRunning ? "开启" : "关闭", action: "auto", disabled: state.remaining <= 0 || state.phase !== "playing" }
   ];
   tools.forEach((tool, index) => elements.push({ ...tool, x: barX + index * (buttonWidth + gap), y: barY, width: buttonWidth, height: 54 }));
+  if (state.bombArmed && state.phase === "playing") {
+    elements.push({ x: margin, y: top + (statsInline ? 46 : 90), width: available, height: 36,
+      label: "点选要炸的格子 · 再点炸弹可取消" });
+  }
+  if (state.bombTarget && state.phase === "playing") {
+    const cardWidth = Math.min(310, available), x = (width - cardWidth) / 2;
+    const y = Math.max(top + 45, barY - 216);
+    elements.push(
+      { x: 0, y: 0, width, height, label: "", role: "scrim" },
+      { x, y, width: cardWidth, height: 204, label: "炸掉这个格子？", secondary: "消耗 1 枚炸弹，只移除高亮的格子", role: "card" },
+      { x: x + 18, y: y + 134, width: (cardWidth - 44) / 2, height: 48, label: "取消", action: "bombCancel" },
+      { x: x + cardWidth / 2 + 4, y: y + 134, width: (cardWidth - 44) / 2, height: 48, label: "确认炸掉", action: "bombConfirm", role: "primary" }
+    );
+  }
   if (state.phase !== "playing") {
     const won = state.phase === "won";
-    const last = state.level >= state.levelCount;
     const cardWidth = Math.min(310, available), cardHeight = 204;
     const x = (width - cardWidth) / 2, y = Math.max(top + 45, (height - cardHeight) / 2);
     elements.push(
       { x: 0, y: 0, width, height, label: "", role: "scrim" },
-      { x, y, width: cardWidth, height: cardHeight, label: won ? (last ? "全部通关！" : "过关了！") : "再试一次",
+      { x, y, width: cardWidth, height: cardHeight, label: won ? "过关了！" : "再试一次",
         secondary: `难度 ${state.level} · ${state.moves} 步 · ${stars(state.stars)}`, role: "card" },
       { x: x + 18, y: y + 134, width: (cardWidth - 44) / 2, height: 48, label: "重新挑战", action: "reset" },
       { x: x + cardWidth / 2 + 4, y: y + 134, width: (cardWidth - 44) / 2, height: 48,
-        label: won && !last ? "下一关" : won ? "再玩一次" : "继续挑战", action: won && !last ? "levelNext" : "reset", role: "primary" }
+        label: won ? "下一关" : "继续挑战", action: won ? "levelNext" : "reset", role: "primary" }
     );
   }
   return elements;

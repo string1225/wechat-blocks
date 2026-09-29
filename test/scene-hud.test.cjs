@@ -12,7 +12,7 @@ const { SceneHud, layoutSceneHud } = require("../src/ui/SceneHud.ts");
 const { CubeGrid, BLOCK_SIZE } = require("../src/world/CubeGrid.ts");
 const { getLevelConfig } = require("../src/data/levels.ts");
 const { createTextureCanvas } = require("../src/platform/canvas.ts");
-const state = { autoRunning: false, canUndo: true, level: 1, levelCount: 10, maxMoves: 72,
+const state = { autoRunning: false, canUndo: true, level: 1, bombArmed: false, bombTarget: null, maxMoves: 72,
   moves: 2, phase: "playing", powerups: { undo: 5, bomb: 3 }, remaining: 62, stars: 3 };
 function canvas() {
   const context = new Proxy({}, { get: (target, name) => target[name] ?? (() => {}) });
@@ -60,7 +60,7 @@ test("victory is a modal canvas panel with working next-level and replay buttons
   const next = elements.find(e => e.label === "下一关");
   assert.equal(hud.pick(next.x + 10, next.y + 10), "levelNext");
   assert.equal(hud.pick(310, 100), "consume");
-  assert.equal(layoutSceneHud(320, 640, { ...won, level: 10 }).some(e => e.label === "下一关"), false);
+  assert.equal(layoutSceneHud(320, 640, { ...won, level: 1000 }).some(e => e.label === "下一关"), true);
 });
 
 function sceneFixture(t) {
@@ -76,7 +76,7 @@ function sceneFixture(t) {
   });
   const scene = new module.exports.GameScene({ clientWidth: 320, clientHeight: 640 });
   const grid = new CubeGrid(getLevelConfig(1));
-  scene.loadBlocks(grid.blocks, 4);
+  scene.loadBlocks(grid.blocks, grid.dimensions);
   return { scene, grid };
 }
 
@@ -119,4 +119,33 @@ test("blocked feedback flashes and shakes only the selected block then restores 
   scene.mesh.getColorAt(0, warning); scene.mesh.getMatrixAt(0, matrix);
   assert.equal(warning.getHex(), base.getHex());
   assert.ok(new THREE.Vector3().setFromMatrixPosition(matrix).distanceTo(original) < 1e-6);
+});
+
+test("camera crosses both poles smoothly and returns after a full vertical revolution", t => {
+  const { scene } = sceneFixture(t);
+  const start = scene.camera.position.clone(), orientation = scene.camera.quaternion.clone();
+  for (let turn = 0; turn < 720; turn++) {
+    const before = scene.camera.quaternion.clone();
+    scene.rotate(0, Math.PI * 2 / 0.005 / 720);
+    assert.ok(before.angleTo(scene.camera.quaternion) < 0.02, "no abrupt flip at either pole");
+    assert.ok(scene.camera.position.toArray().every(Number.isFinite));
+  }
+  assert.ok(start.distanceTo(scene.camera.position) < 1e-6);
+  assert.ok(orientation.angleTo(scene.camera.quaternion) < 1e-6);
+  scene.rotate(0, Math.PI / 0.005);
+  assert.ok(scene.camera.position.y < scene.target.y, "underside must be reachable");
+  assert.equal(scene.stage.visible, false, "decorative floor cannot cover the underside");
+});
+
+test("bomb confirmation consumes background clicks and targets the confirm/cancel buttons", t => {
+  textureRuntime(t);
+  const selected = { ...state, bombArmed: true, bombTarget: { x: 1, y: 0, z: 2 } };
+  const hud = new SceneHud(); hud.update(375, 812, selected);
+  const elements = layoutSceneHud(375, 812, selected);
+  assert.ok(elements.some(e => e.label === "炸掉这个格子？"));
+  assert.equal(hud.pick(30, 30), "consume");
+  for (const action of ["bombConfirm", "bombCancel"]) {
+    const button = elements.find(e => e.action === action);
+    assert.equal(hud.pick(button.x + 10, button.y + 10), action);
+  }
 });

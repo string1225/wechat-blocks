@@ -13,6 +13,7 @@ export class GameScene {
   readonly camera: THREE.PerspectiveCamera;
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene = new THREE.Scene();
+  private readonly stage = new THREE.Group();
   private readonly hud: SceneHud | null;
   private hudState: UiState | null = null;
   private readonly raycaster = new THREE.Raycaster();
@@ -27,6 +28,7 @@ export class GameScene {
   private readonly pointer = new THREE.Vector2();
   private readonly target = new THREE.Vector3();
   private readonly blocked = new Map<number, number>();
+  private bombTarget: number | null = null;
   private blocks: readonly GridBlock[] = [];
   private mesh: THREE.InstancedMesh | null = null;
   private theta = Math.PI * 0.22;
@@ -50,7 +52,7 @@ export class GameScene {
 
   setHudState(state: UiState): void { this.hudState = state; }
 
-  loadBlocks(blocks: readonly GridBlock[], size: number): void {
+  loadBlocks(blocks: readonly GridBlock[], dimensions: Position3): void {
     if (this.mesh) {
       this.scene.remove(this.mesh);
       this.mesh.geometry.dispose();
@@ -62,14 +64,17 @@ export class GameScene {
       this.mesh.dispose();
     }
     this.blocked.clear();
+    this.bombTarget = null;
     this.blocks = blocks;
     this.mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE),
       createBlockMaterials(this.renderer.capabilities.getMaxAnisotropy()), Math.max(1, blocks.length));
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.mesh.frustumCulled = false;
     this.scene.add(this.mesh);
-    this.activeSize = size;
-    this.target.set(0, ((size - 1) * BLOCK_SIZE) / 2, 0);
+    this.activeSize = Math.max(dimensions.x, dimensions.y, dimensions.z);
+    this.target.set(0, ((dimensions.y - 1) * BLOCK_SIZE) / 2, 0);
+    this.camera.far = Math.max(100, this.activeSize * BLOCK_SIZE * 40);
+    this.camera.updateProjectionMatrix();
     this.frameActiveBlocks();
     this.updateBlocks(blocks);
   }
@@ -84,6 +89,7 @@ export class GameScene {
       this.scale.setScalar(block.active ? block.scale : 0);
       this.position.copy(block.current);
       this.color.set(block.color);
+      if (block.instanceId === this.bombTarget) this.color.copy(this.warningColor);
       const remaining = this.blocked.get(block.instanceId) ?? 0;
       if (remaining > 0) {
         const elapsed = 0.42 - remaining, envelope = remaining / 0.42;
@@ -101,6 +107,11 @@ export class GameScene {
 
   showBlocked(block: GridBlock): void {
     this.blocked.set(block.instanceId, 0.42);
+    this.updateBlocks(this.blocks);
+  }
+
+  setBombTarget(instanceId: number | null): void {
+    this.bombTarget = instanceId;
     this.updateBlocks(this.blocks);
   }
 
@@ -128,8 +139,8 @@ export class GameScene {
   }
 
   rotate(deltaX: number, deltaY: number): void {
-    this.theta -= deltaX * 0.006;
-    this.phi = THREE.MathUtils.clamp(this.phi - deltaY * 0.005, 0.22, Math.PI * 0.48);
+    this.theta = THREE.MathUtils.euclideanModulo(this.theta - deltaX * 0.006, Math.PI * 2);
+    this.phi = THREE.MathUtils.euclideanModulo(this.phi - deltaY * 0.005, Math.PI * 2);
     this.updateCamera();
   }
 
@@ -187,7 +198,11 @@ export class GameScene {
     const sinPhi = Math.sin(this.phi);
     this.camera.position.set(this.target.x + this.radius * sinPhi * Math.sin(this.theta),
       this.target.y + this.radius * Math.cos(this.phi), this.target.z + this.radius * sinPhi * Math.cos(this.theta));
+    // A tangent up vector stays perpendicular to the view even at the poles,
+    // so crossing the top/bottom never clamps or abruptly flips the camera.
+    this.camera.up.set(-Math.cos(this.phi) * Math.sin(this.theta), sinPhi, -Math.cos(this.phi) * Math.cos(this.theta));
     this.camera.lookAt(this.target);
+    this.stage.visible = this.camera.position.y >= this.target.y;
   }
 
   private frameActiveBlocks(resetZoom = true): void {
@@ -211,12 +226,13 @@ export class GameScene {
     for (const material of Array.isArray(grid.material) ? grid.material : [grid.material]) {
       material.transparent = true; material.opacity = 0.22;
     }
-    this.scene.add(grid);
+    this.stage.add(grid);
     const floor = new THREE.Mesh(new THREE.CircleGeometry(5.4, 48), new THREE.MeshBasicMaterial({
       color: 0xffffff, transparent: true, opacity: 0.08, side: THREE.DoubleSide
     }));
     floor.rotation.x = -Math.PI / 2; floor.position.y = -0.58;
-    this.scene.add(floor);
+    this.stage.add(floor);
+    this.scene.add(this.stage);
   }
 }
 

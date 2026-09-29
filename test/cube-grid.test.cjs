@@ -82,7 +82,9 @@ function createGrid() {
     id: 1,
     maxMoves: 72,
     seed: 12648430,
-    size: 4
+    size: 4,
+    dimensions: { x: 4, y: 4, z: 4 },
+    layoutVersion: 2
   });
 }
 

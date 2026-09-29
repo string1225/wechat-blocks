@@ -10,6 +10,8 @@ const game = new Game(canvas, ui, { sceneHud });
 ui.bind({
   onAuto: () => game.toggleAuto(),
   onBomb: () => game.useBomb(),
+  onBombConfirm: () => game.confirmBomb(),
+  onBombCancel: () => game.cancelBomb(),
   onLevel: (level) => game.loadLevel(level),
   onNext: () => game.nextLevel(),
   onReset: () => game.resetLevel(),

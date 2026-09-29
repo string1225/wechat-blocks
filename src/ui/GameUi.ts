@@ -1,10 +1,11 @@
-import type { GamePhase, PowerupState } from "../game/types";
+import type { GamePhase, Position3, PowerupState } from "../game/types";
 
 export interface UiState {
   autoRunning: boolean;
   canUndo: boolean;
   level: number;
-  levelCount: number;
+  bombArmed: boolean;
+  bombTarget: Position3 | null;
   maxMoves: number;
   moves: number;
   phase: GamePhase;
@@ -23,6 +24,8 @@ export interface ResultState {
 export interface UiHandlers {
   onAuto: () => void;
   onBomb: () => void;
+  onBombConfirm: () => void;
+  onBombCancel: () => void;
   onLevel: (level: number) => void;
   onNext: () => void;
   onReset: () => void;

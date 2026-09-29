@@ -14,7 +14,7 @@ from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-MAX_BODY = 256 * 1024
+MAX_BODY = 8 * 1024 * 1024
 TOKEN_RE = re.compile(r"^[a-f0-9]{64}$")
 
 
@@ -22,14 +22,28 @@ def integer(value, low, high):
     return type(value) is int and low <= value <= high
 
 
-def valid_blocks(blocks, size):
-    if not isinstance(blocks, list) or len(blocks) > size ** 3:
+def level_dimensions(level, version):
+    if version == 1:
+        edge = 4 if level <= 3 else 5 if level <= 7 else 6
+        return edge, edge, edge
+    remaining, edge, interval = level - 1, 4, 1
+    while remaining >= 3 * interval:
+        remaining -= 3 * interval
+        edge += 1
+        interval *= 2
+    steps = remaining // interval
+    return edge + int(steps >= 1), edge, edge + int(steps >= 2)
+
+
+def valid_blocks(blocks, dimensions):
+    count = dimensions[0] * dimensions[1] * dimensions[2]
+    if not isinstance(blocks, list) or len(blocks) > count:
         return False
     ids, positions = set(), set()
     for block in blocks:
         if (not isinstance(block, list) or len(block) != 4
-                or not integer(block[0], 0, size ** 3 - 1)
-                or not all(integer(n, 0, size - 1) for n in block[1:])):
+                or not integer(block[0], 0, count - 1)
+                or not all(integer(n, 0, edge - 1) for n, edge in zip(block[1:], dimensions))):
             return False
         position = tuple(block[1:])
         if block[0] in ids or position in positions:
@@ -40,18 +54,19 @@ def valid_blocks(blocks, size):
 
 
 def valid_progress(p):
-    if not isinstance(p, dict) or p.get("version") != 1 or not integer(p.get("level"), 1, 10):
+    if (not isinstance(p, dict) or not integer(p.get("version"), 1, 2)
+            or not integer(p.get("level"), 1, 10 if p["version"] == 1 else 9007199254740991)):
         return False
-    size = 4 if p["level"] <= 3 else 5 if p["level"] <= 7 else 6
-    max_moves = size ** 3 + 8
+    dimensions = level_dimensions(p["level"], p["version"])
+    max_moves = dimensions[0] * dimensions[1] * dimensions[2] + 8
     powerups, history = p.get("powerups"), p.get("history")
     if (not integer(p.get("moves"), 0, max_moves) or p.get("phase") not in ("playing", "won", "failed")
             or not isinstance(powerups, dict) or not integer(powerups.get("undo"), 0, 5)
-            or not integer(powerups.get("bomb"), 0, 3) or not valid_blocks(p.get("blocks"), size)
+            or not integer(powerups.get("bomb"), 0, 3) or not valid_blocks(p.get("blocks"), dimensions)
             or not isinstance(history, list) or len(history) > 30):
         return False
     if not all(isinstance(turn, dict) and integer(turn.get("moves"), 0, p["moves"] - 1)
-               and valid_blocks(turn.get("blocks"), size) for turn in history):
+               and valid_blocks(turn.get("blocks"), dimensions) for turn in history):
         return False
     if p["phase"] == "won":
         return not p["blocks"]
