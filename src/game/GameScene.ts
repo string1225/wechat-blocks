@@ -25,6 +25,8 @@ export class GameScene {
   private readonly warningColor = new THREE.Color("#ffb33f");
   private readonly localForward = new THREE.Vector3(0, 1, 0);
   private readonly direction = new THREE.Vector3();
+  private readonly faceDirection = new THREE.Vector3();
+  private readonly faceNormals = [new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 1)];
   private readonly pointer = new THREE.Vector2();
   private readonly target = new THREE.Vector3();
   private readonly blocked = new Map<number, number>();
@@ -66,8 +68,17 @@ export class GameScene {
     this.blocked.clear();
     this.bombTarget = null;
     this.blocks = blocks;
-    this.mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE),
-      createBlockMaterials(this.renderer.capabilities.getMaxAnisotropy()), Math.max(1, blocks.length));
+    const count = Math.max(1, blocks.length);
+    // Unit cells and half-integer centers share exact float32 edge positions.
+    // Apply world scale once, after all instance transforms, to avoid cracks
+    // caused by independently rounded 0.82-sized faces and translations.
+    const geometry = new THREE.BoxGeometry(1, 1, 1);
+    for (const name of ["exposedPositive", "exposedNegative"]) {
+      geometry.setAttribute(name, new THREE.InstancedBufferAttribute(new Float32Array(count * 3), 3).setUsage(THREE.DynamicDrawUsage));
+    }
+    this.mesh = new THREE.InstancedMesh(geometry, createBlockMaterials(this.renderer.capabilities.getMaxAnisotropy()), count);
+    this.mesh.scale.setScalar(BLOCK_SIZE);
+    this.mesh.updateMatrixWorld(true);
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.mesh.frustumCulled = false;
     this.scene.add(this.mesh);
@@ -82,6 +93,13 @@ export class GameScene {
   updateBlocks(blocks: readonly GridBlock[]): void {
     if (!this.mesh) return;
     this.blocks = blocks;
+    // Internal, touching faces must never reach the depth buffer. In
+    // particular a dark rear face can otherwise bleed through a shared edge
+    // when viewed nearly edge-on. Moving/shaking cells expose all their faces.
+    const stationary = new Set(blocks.filter(block => block.active && !block.flying && block.scale === 1
+      && !this.blocked.has(block.instanceId)).map(block => cellKey(block.grid.x, block.grid.y, block.grid.z)));
+    const positive = this.mesh.geometry.getAttribute("exposedPositive") as THREE.InstancedBufferAttribute;
+    const negative = this.mesh.geometry.getAttribute("exposedNegative") as THREE.InstancedBufferAttribute;
     for (const block of blocks) {
       const direction = block.faceArrows[0]!.direction;
       this.direction.set(direction.x, direction.y, direction.z).normalize();
@@ -96,11 +114,26 @@ export class GameScene {
         this.position.addScaledVector(this.direction, Math.sin(elapsed * 65) * 0.035 * envelope);
         this.color.lerp(this.warningColor, (0.65 + 0.35 * Math.cos(elapsed * 50)) * envelope);
       }
+      for (let axis = 0; axis < 3; axis++) {
+        this.faceDirection.copy(this.faceNormals[axis]!).applyQuaternion(this.rotation).round();
+        for (const sign of [1, -1]) {
+          const hidden = !block.flying && block.scale === 1 && !this.blocked.has(block.instanceId)
+            && stationary.has(cellKey(block.grid.x + sign * this.faceDirection.x,
+              block.grid.y + sign * this.faceDirection.y, block.grid.z + sign * this.faceDirection.z));
+          (sign === 1 ? positive : negative).setComponent(block.instanceId, axis, block.active && !hidden ? 1 : 0);
+        }
+      }
+      this.position.divideScalar(BLOCK_SIZE);
       this.matrix.compose(this.position, this.rotation, this.scale);
+      for (const index of [0, 1, 2, 4, 5, 6, 8, 9, 10]) {
+        if (Math.abs(this.matrix.elements[index]!) < 1e-12) this.matrix.elements[index] = 0;
+      }
       this.mesh.setMatrixAt(block.instanceId, this.matrix);
       this.mesh.setColorAt(block.instanceId, this.color);
     }
     this.mesh.instanceMatrix.needsUpdate = true;
+    positive.needsUpdate = true;
+    negative.needsUpdate = true;
     if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
     this.mesh.computeBoundingSphere();
   }
@@ -242,3 +275,5 @@ function dominantAxis(vector: THREE.Vector3): Position3 {
   if (y >= x && y >= z) return { x: 0, y: Math.sign(vector.y) || 1, z: 0 };
   return { x: 0, y: 0, z: Math.sign(vector.z) || 1 };
 }
+
+function cellKey(x: number, y: number, z: number): string { return `${x}:${y}:${z}`; }

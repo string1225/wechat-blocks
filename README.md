@@ -1,6 +1,6 @@
-# 和AI一起消方块
+# 智能消方块
 
-![和AI一起消方块头像](src/assets/app-avatar.png)
+![智能消方块头像](src/assets/app-avatar.png)
 
 3D 方块消除小游戏原型。当前实现包括 Three.js 渲染、点击移出、360° 旋转/缩放、步数、星级、重置、撤销、指定格子炸弹、自动运行和持续生成的随机种子关卡。尺寸轮流递增，详见[难度增长表](docs/difficulty.md)。
 

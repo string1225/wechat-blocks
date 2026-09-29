@@ -13,10 +13,12 @@ export interface HudElement {
 export function layoutSceneHud(width: number, height: number, state: UiState): HudElement[] {
   const insets = getHudInsets();
   const margin = 12, gap = 8;
-  const top = Math.min(insets.top, Math.max(12, height - 180));
+  const titleTop = Math.min(insets.top, Math.max(12, height - 224));
+  const top = titleTop + 40;
   const available = width - margin * 2;
   const stepWidth = Math.min(80, available - 84);
   const elements: HudElement[] = [
+    { x: margin, y: titleTop, width: Math.min(available, 164), height: 32, label: "智能消方块" },
     { x: margin, y: top, width: 34, height: 38, label: "‹", action: "levelPrev", disabled: state.level <= 1 },
     { x: margin + 42, y: top, width: stepWidth, height: 38, label: `难度 ${state.level}` },
     { x: margin + 50 + stepWidth, y: top, width: 34, height: 38, label: "›", action: "levelNext" }

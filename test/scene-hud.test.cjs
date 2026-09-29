@@ -101,7 +101,8 @@ test("arrows share the solid cube faces and the darker rear tracks every flight 
     assert.ok(forward.distanceTo(expected) < 1e-6);
     assert.ok(rear.distanceTo(expected.negate()) < 1e-6);
   }
-  assert.ok(Array.from(scene.mesh.geometry.attributes.position.array).every(v => Math.abs(v) <= BLOCK_SIZE / 2 + 1e-7));
+  assert.ok(Array.from(scene.mesh.geometry.attributes.position.array).every(v => Math.abs(v) === 0.5));
+  assert.equal(scene.mesh.scale.x, BLOCK_SIZE);
 });
 
 test("blocked feedback flashes and shakes only the selected block then restores its original pose", t => {
@@ -113,12 +114,64 @@ test("blocked feedback flashes and shakes only the selected block then restores 
   assert.notEqual(warning.getHex(), base.getHex());
   scene.render(0.06);
   const matrix = new THREE.Matrix4(); scene.mesh.getMatrixAt(0, matrix);
+  matrix.premultiply(scene.mesh.matrixWorld);
   assert.ok(new THREE.Vector3().setFromMatrixPosition(matrix).distanceTo(original) > 0.001);
   assert.ok(block.current.equals(original));
   scene.render(0.5);
   scene.mesh.getColorAt(0, warning); scene.mesh.getMatrixAt(0, matrix);
+  matrix.premultiply(scene.mesh.matrixWorld);
   assert.equal(warning.getHex(), base.getHex());
   assert.ok(new THREE.Vector3().setFromMatrixPosition(matrix).distanceTo(original) < 1e-6);
+});
+
+test("touching faces are hidden regardless of arrow orientation and reappear after removing a cell", t => {
+  const { scene, grid } = sceneFixture(t);
+  const matrix = new THREE.Matrix4();
+  const normals = [new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 1)];
+  const faceCount = () => ["exposedPositive", "exposedNegative"].reduce((total, name) =>
+    total + Array.from(scene.mesh.geometry.getAttribute(name).array).reduce((a, b) => a + b, 0), 0);
+  assert.equal(faceCount(), 6 * 4 * 4, "only the outer shell of a 4³ board may draw");
+  for (const block of grid.blocks) {
+    scene.mesh.getMatrixAt(block.instanceId, matrix);
+    for (let axis = 0; axis < 3; axis++) for (const sign of [1, -1]) {
+      const world = normals[axis].clone().transformDirection(matrix).multiplyScalar(sign).round();
+      const neighbor = { x: block.grid.x + world.x, y: block.grid.y + world.y, z: block.grid.z + world.z };
+      const outside = [neighbor.x, neighbor.y, neighbor.z].some(n => n < 0 || n >= 4);
+      const attribute = scene.mesh.geometry.getAttribute(sign === 1 ? "exposedPositive" : "exposedNegative");
+      assert.equal(attribute.getComponent(block.instanceId, axis), Number(outside));
+    }
+  }
+  const middle = grid.blocks.find(b => b.grid.x === 1 && b.grid.y === 1 && b.grid.z === 1);
+  grid.removeBlock(middle); scene.updateBlocks(grid.blocks);
+  assert.equal(faceCount(), 6 * 4 * 4 + 6, "all six faces around a bomb-created cavity reappear");
+});
+
+test("rotated neighboring cubes use the exact same lattice corners before world scaling", t => {
+  const { scene, grid } = sceneFixture(t);
+  const matrix = new THREE.Matrix4(), point = new THREE.Vector3();
+  for (const block of grid.blocks) {
+    scene.mesh.getMatrixAt(block.instanceId, matrix);
+    for (const x of [-0.5, 0.5]) for (const y of [-0.5, 0.5]) for (const z of [-0.5, 0.5]) {
+      point.set(x, y, z).applyMatrix4(matrix);
+      assert.ok(point.toArray().every(n => Number.isInteger(n * 2)), "no independently rounded edge coordinates");
+    }
+  }
+});
+
+test("moving and shaking blocks expose their contact faces until they settle", t => {
+  const { scene, grid } = sceneFixture(t);
+  const middle = grid.blocks.find(b => b.grid.x === 1 && b.grid.y === 1 && b.grid.z === 1);
+  const faces = () => ["exposedPositive", "exposedNegative"].flatMap(name => {
+    const a = scene.mesh.geometry.getAttribute(name);
+    return [0, 1, 2].map(axis => a.getComponent(middle.instanceId, axis));
+  });
+  assert.deepEqual(faces(), [0, 0, 0, 0, 0, 0]);
+  scene.showBlocked(middle);
+  assert.deepEqual(faces(), [1, 1, 1, 1, 1, 1]);
+  scene.render(0.5);
+  assert.deepEqual(faces(), [0, 0, 0, 0, 0, 0]);
+  middle.flying = true; scene.updateBlocks(grid.blocks);
+  assert.deepEqual(faces(), [1, 1, 1, 1, 1, 1]);
 });
 
 test("camera crosses both poles smoothly and returns after a full vertical revolution", t => {

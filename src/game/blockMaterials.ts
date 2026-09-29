@@ -15,7 +15,7 @@ function faceMaterial(kind: "arrow" | "front" | "rear", anisotropy: number): THR
   const canvas = createTextureCanvas(size, size);
   const context = canvas.getContext("2d");
   if (!context) throw new Error("Unable to draw block faces.");
-  context.fillStyle = kind === "rear" ? "#cccccc" : "#ffffff";
+  context.fillStyle = kind === "rear" ? "#e0e0e0" : "#ffffff";
   context.fillRect(0, 0, size, size);
   context.strokeStyle = "#243528";
   context.lineWidth = 2.5;
@@ -37,5 +37,18 @@ function faceMaterial(kind: "arrow" | "front" | "rear", anisotropy: number): THR
   map.anisotropy = Math.min(anisotropy, 8);
   // The markings share the cube's actual triangles and depth. There are no
   // displaced, double-sided arrow planes that can peek around an edge.
-  return new THREE.MeshBasicMaterial({ map, side: THREE.FrontSide, depthTest: true, depthWrite: true });
+  const material = new THREE.MeshBasicMaterial({ map, side: THREE.FrontSide, depthTest: true, depthWrite: true });
+  material.onBeforeCompile = (shader) => {
+    shader.vertexShader = `attribute vec3 exposedPositive;
+attribute vec3 exposedNegative;
+varying float vFaceExposed;
+${shader.vertexShader}`.replace("#include <begin_vertex>", `#include <begin_vertex>
+vFaceExposed = dot(max(normal, vec3(0.0)), exposedPositive)
+  + dot(max(-normal, vec3(0.0)), exposedNegative);`);
+    shader.fragmentShader = `varying float vFaceExposed;\n${shader.fragmentShader}`
+      .replace("#include <clipping_planes_fragment>", `#include <clipping_planes_fragment>
+if (vFaceExposed < 0.5) discard;`);
+  };
+  material.customProgramCacheKey = () => "solid-block-exposed-faces-v1";
+  return material;
 }
