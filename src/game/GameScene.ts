@@ -240,7 +240,7 @@ export class GameScene {
 
   private frameActiveBlocks(resetZoom = true): void {
     const insets = getHudInsets();
-    const playTop = insets.top + 148, playBottom = this.height - insets.bottom - 108;
+    const playTop = insets.top + 114, playBottom = this.height - insets.bottom - 116;
     const playHeight = Math.max(80, playBottom - playTop);
     const centerY = (playTop + playBottom) / 2;
     this.camera.setViewOffset(this.width, this.height, 0, this.height / 2 - centerY, this.width, this.height);

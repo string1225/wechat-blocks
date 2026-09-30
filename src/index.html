@@ -17,10 +17,9 @@
       button:focus-visible { outline: 2px solid #95f5cd; outline-offset: 3px; }
       button:disabled { cursor: default; color: #8490af; }
       .hud { pointer-events: none; position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: space-between;
-        padding: max(14px, env(safe-area-inset-top)) 12px max(18px, calc(env(safe-area-inset-bottom) + 18px)); }
-      .topbar, .toolbar { pointer-events: auto; width: min(100%, 440px); border: 1px solid #465071; border-radius: 22px;
-        background: #202744; box-shadow: 0 12px 36px #0d163326; }
-      .topbar { height: 136px; padding: 10px 12px 8px; }
+        padding: 0; }
+      .topbar, .toolbar { pointer-events: auto; width: 100%; flex-shrink: 0; border: 0; border-radius: 0; background: #202744; }
+      .topbar { padding: max(14px, env(safe-area-inset-top)) 12px 12px; }
       .title-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 44px; margin-bottom: 10px; }
       .brand { display: flex; align-items: center; gap: 8px; min-width: 0; }
       .brand img { width: 34px; height: 34px; border-radius: 11px; }
@@ -35,14 +34,14 @@
       .chip { display: flex; height: 36px; align-items: center; justify-content: center; gap: 4px; font-size: 13px; white-space: nowrap; }
       .chip strong { font-size: 15px; }
       .remaining { padding: 0 10px; background: #2b3455; border-radius: 12px; }
-      .meta-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 6px; padding: 0 4px; height: 22px; font-size: 12px; color: #aab8d3; }
-      .stars { color: #ffd18c; font-size: 16px; letter-spacing: 3px; }
       .icon-button { display: flex; align-items: center; justify-content: center; width: 32px; height: 36px; border: 1px solid #465071;
         border-radius: 12px; background: #333d60; color: #f2f7ff; }
       .icon-button svg { width: 18px; height: 18px; stroke-width: 2; }
-      .toolbar { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 6px; padding: 8px 8px 4px; height: 106px; }
-      .tool-button { min-width: 0; height: 76px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px;
-        border: 1px solid #465071; border-radius: 15px; padding: 7px 2px; background: #333d60; color: #f2f7ff; }
+      .toolbar { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 0; padding: 0; }
+      .tool-button { min-width: 0; height: calc(76px + max(18px, env(safe-area-inset-bottom) + 18px)); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px;
+        border: 0; border-right: 1px solid #465071; border-radius: 0; padding: 7px 2px calc(7px + max(18px, env(safe-area-inset-bottom) + 18px)); background: #333d60; color: #f2f7ff; }
+      .tool-button:last-child { border-right: 0; }
+      .tool-button:active:not(:disabled) { transform: none; filter: brightness(.94); }
       .tool-button svg { width: 20px; height: 20px; stroke-width: 1.8; }
       .tool-copy { display: grid; text-align: center; gap: 4px; }
       .tool-copy b { font-size: 14px; line-height: 1; }
@@ -51,13 +50,13 @@
       .tool-button[data-active="true"] { background: #95f5cd; color: #173e34; border-color: #95f5cd; }
       .tool-button[data-active="true"] .tool-copy span { color: #32604e; }
       #hud-bomb[data-active="true"] { background: #ffd18c; border-color: #ffd18c; }
-      .gesture-hint { grid-column: 1 / -1; text-align: center; font-size: 10px; color: #aab8d3; line-height: 12px; }
+      .gesture-hint { grid-column: 1 / -1; height: 28px; text-align: center; font-size: 11px; color: #aab8d3; line-height: 28px; }
       .zoom-controls { position: absolute; right: 14px; bottom: max(140px, calc(env(safe-area-inset-bottom) + 140px)); display: flex; gap: 6px; }
       .zoom-controls .icon-button { background: #202744; height: 30px; width: 30px; opacity: .85; }
       .toast { pointer-events: none; position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); border-radius: 14px;
         padding: 12px 18px; background: #202744ed; opacity: 0; transition: opacity .16s; font-size: 14px; }
       .toast[data-visible="true"] { opacity: 1; }
-      .bomb-hint { position: absolute; top: max(158px, calc(env(safe-area-inset-top) + 144px)); left: 50%; transform: translateX(-50%);
+      .bomb-hint { position: absolute; top: calc(max(14px, env(safe-area-inset-top)) + 110px); left: 50%; transform: translateX(-50%);
         padding: 8px 12px; border-radius: 12px; color: #173e34; background: #ffd18c; font-size: 12px; white-space: nowrap; pointer-events: none; }
       .result { position: absolute; inset: 0; display: none; place-items: center; padding: 20px; background: #0c1228a6; }
       .result[data-visible="true"] { display: grid; }
@@ -98,9 +97,9 @@
             </div>
             <span class="chip remaining">剩余 <strong id="hud-left">0</strong></span>
           </div>
-          <div class="meta-row"><span id="hud-dimensions">尺寸 4 × 4 × 4</span><span class="stars" id="hud-stars">---</span></div>
         </header>
         <footer class="toolbar">
+          <span class="gesture-hint">拖动自由旋转 · 双指缩放</span>
           <button class="tool-button" id="hud-reset" type="button">
             <i data-lucide="refresh-ccw"></i>
             <span class="tool-copy"><b>重置</b><span id="hud-reset-count">重新开始</span></span>
@@ -117,7 +116,6 @@
             <i data-lucide="play"></i>
             <span class="tool-copy"><b>自动</b><span id="hud-auto-state">关闭</span></span>
           </button>
-          <span class="gesture-hint">拖动自由旋转 · 双指缩放</span>
         </footer>
       </div>
       <div class="zoom-controls" aria-label="缩放">

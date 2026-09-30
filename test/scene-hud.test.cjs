@@ -229,8 +229,8 @@ test("default framing fits 90 percent of portrait width and clears both toolbars
       const x = corners.map(p => (p.x + 1) * width / 2), y = corners.map(p => (1 - p.y) * height / 2);
       assert.ok(Math.min(...x) >= width * .05 - .01 && Math.max(...x) <= width * .95 + .01);
       if (height > width) assert.ok((Math.max(...x) - Math.min(...x)) / width > .85, "portrait board fills approximately 90% width");
-      assert.ok(Math.min(...y) >= 14 + 148 - .01);
-      assert.ok(Math.max(...y) <= height - 18 - 108 + .01);
+      assert.ok(Math.min(...y) >= 14 + 114 - .01);
+      assert.ok(Math.max(...y) <= height - 18 - 116 + .01);
     }
   }
 });

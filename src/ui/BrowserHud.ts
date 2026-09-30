@@ -4,12 +4,10 @@ import type { GameUi, ResultState, UiHandlers, UiState } from "./GameUi";
 
 export class BrowserHud implements GameUi {
   private readonly timer = mustGet<HTMLElement>("hud-timer");
-  private readonly dimensions = mustGet<HTMLElement>("hud-dimensions");
   private readonly difficulty = mustGet<HTMLElement>("hud-difficulty");
   private readonly difficultyPrev = mustGet<HTMLButtonElement>("hud-difficulty-prev");
   private readonly difficultyNext = mustGet<HTMLButtonElement>("hud-difficulty-next");
   private readonly left = mustGet<HTMLElement>("hud-left");
-  private readonly stars = mustGet<HTMLElement>("hud-stars");
   private readonly reset = mustGet<HTMLButtonElement>("hud-reset");
   private readonly undo = mustGet<HTMLButtonElement>("hud-undo");
   private readonly bomb = mustGet<HTMLButtonElement>("hud-bomb");
@@ -58,10 +56,8 @@ export class BrowserHud implements GameUi {
     this.currentLevel = state.level;
 
     this.timer.textContent = formatTime(state.elapsedSeconds);
-    this.dimensions.textContent = `尺寸 ${state.dimensions.x} × ${state.dimensions.z} × ${state.dimensions.y}`;
     this.difficulty.textContent = String(state.level);
     this.left.textContent = String(state.remaining);
-    this.stars.textContent = renderStars(state.stars);
     this.undoCount.textContent = `${state.powerups.undo} 次可用`;
     this.bombCount.textContent = state.bombArmed ? "点选方块" : `${state.powerups.bomb} 枚可用`;
     this.bomb.dataset.active = String(state.bombArmed);

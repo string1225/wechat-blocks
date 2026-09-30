@@ -8,32 +8,29 @@ export type SceneHudAction = "auto" | "bomb" | "bombConfirm" | "bombCancel" | "l
 export interface HudElement {
   x: number; y: number; width: number; height: number;
   label: string; secondary?: string; disabled?: boolean;
-  action?: SceneHudAction; role?: "card" | "primary" | "scrim" | "panel" | "brand" | "metric" | "text" | "stars" | "tool";
+  action?: SceneHudAction; role?: "card" | "primary" | "scrim" | "panel" | "brand" | "metric" | "text" | "tool";
   icon?: "reset" | "undo" | "bomb" | "play" | "pause"; active?: boolean;
 }
 
 export function layoutSceneHud(width: number, height: number, state: UiState): HudElement[] {
   const insets = getHudInsets();
-  const margin = 12, gap = 6;
+  const margin = 12;
   const titleTop = Math.min(insets.top, Math.max(12, height - 260));
-  const available = Math.min(width - margin * 2, 440), left = (width - available) / 2;
-  const top = titleTop + 64;
+  const available = width - margin * 2, left = margin;
+  const top = titleTop + 54;
   const stepWidth = Math.min(92, available - 174);
   const elements: HudElement[] = [
-    { x: left, y: titleTop, width: available, height: 136, label: "", role: "panel" },
-    { x: left + 14, y: titleTop + 10, width: available - 116, height: 44, label: "智能消方块", secondary: "3D 空间消除", role: "brand" },
-    { x: left + available - 94, y: titleTop + 10, width: 80, height: 44, label: formatTime(state.elapsedSeconds), secondary: "本局用时", role: "metric" },
-    { x: left + 12, y: top, width: 32, height: 36, label: "‹", action: "levelPrev", disabled: state.level <= 1 },
-    { x: left + 48, y: top, width: stepWidth, height: 36, label: `难度 ${state.level}`, role: "text" },
-    { x: left + 52 + stepWidth, y: top, width: 32, height: 36, label: "›", action: "levelNext" },
-    { x: left + available - 90, y: top, width: 78, height: 36, label: `剩余 ${state.remaining}`, role: "metric" },
-    { x: left + 12, y: top + 42, width: available - 114, height: 22,
-      label: `尺寸 ${state.dimensions.x} × ${state.dimensions.z} × ${state.dimensions.y}`, role: "text" },
-    { x: left + available - 92, y: top + 42, width: 80, height: 22, label: stars(state.stars), role: "stars" }
+    { x: 0, y: 0, width, height: titleTop + 102, label: "", role: "panel" },
+    { x: left, y: titleTop, width: available - 100, height: 44, label: "智能消方块", secondary: "3D 空间消除", role: "brand" },
+    { x: left + available - 80, y: titleTop, width: 80, height: 44, label: formatTime(state.elapsedSeconds), secondary: "本局用时", role: "metric" },
+    { x: left, y: top, width: 32, height: 36, label: "‹", action: "levelPrev", disabled: state.level <= 1 },
+    { x: left + 36, y: top, width: stepWidth, height: 36, label: `难度 ${state.level}`, role: "text" },
+    { x: left + 40 + stepWidth, y: top, width: 32, height: 36, label: "›", action: "levelNext" },
+    { x: left + available - 78, y: top, width: 78, height: 36, label: `剩余 ${state.remaining}`, role: "metric" }
   ];
-  const barWidth = available, buttonWidth = (barWidth - 16 - gap * 3) / 4;
-  const barX = left + 8, barY = height - insets.bottom - 106;
-  elements.push({ x: left, y: barY, width: barWidth, height: 106, label: "", role: "panel" });
+  const buttonWidth = width / 4, barY = height - insets.bottom - 104;
+  elements.push({ x: 0, y: barY, width, height: height - barY, label: "", role: "panel" });
+  elements.push({ x: 0, y: barY, width, height: 28, label: "拖动自由旋转 · 双指缩放", role: "text" });
   const tools: Array<Pick<HudElement, "label" | "secondary" | "action" | "disabled" | "role" | "icon" | "active">> = [
     { label: "重置", secondary: "重新开始", action: "reset", icon: "reset" },
     { label: "撤销", secondary: `${state.powerups.undo} 次可用`, action: "undo", icon: "undo", disabled: !state.canUndo || state.phase !== "playing" },
@@ -42,10 +39,11 @@ export function layoutSceneHud(width: number, height: number, state: UiState): H
     { label: "自动", secondary: state.autoRunning ? "进行中" : "已关闭", action: "auto", icon: state.autoRunning ? "pause" : "play", active: state.autoRunning,
       disabled: state.remaining <= 0 || state.phase !== "playing" }
   ];
-  tools.forEach((tool, index) => elements.push({ ...tool, role: "tool", x: barX + index * (buttonWidth + gap), y: barY + 8, width: buttonWidth, height: 76 }));
-  elements.push({ x: left + 8, y: barY + 86, width: barWidth - 16, height: 16, label: "拖动自由旋转 · 双指缩放", role: "text" });
+  // Button backgrounds and hit areas extend through the bottom safe area.
+  tools.forEach((tool, index) => elements.push({ ...tool, role: "tool", x: index * buttonWidth,
+    y: barY + 28, width: buttonWidth, height: 76 + insets.bottom }));
   if (state.bombArmed && state.phase === "playing") {
-    elements.push({ x: left, y: titleTop + 144, width: available, height: 32,
+    elements.push({ x: left, y: titleTop + 110, width: available, height: 32,
       label: "点选要炸的格子 · 再点炸弹可取消", role: "primary" });
   }
   if (state.bombTarget && state.phase === "playing") {
@@ -140,18 +138,18 @@ function drawElement(element: HudElement): THREE.CanvasTexture {
   } else {
     ctx.scale(ratio, ratio);
     const { width, height, role } = element;
-    const plain = role === "text" || role === "stars" || role === "brand";
+    const plain = role === "text" || role === "brand";
     const selected = element.active || role === "primary";
     const accent = element.icon === "bomb" ? "#ffd18c" : "#95f5cd";
     if (!plain) {
-      roundedRect(ctx, width, height, role === "panel" || role === "card" ? 22 : role === "tool" ? 15 : 12);
+      roundedRect(ctx, width, height, role === "panel" || role === "tool" ? 0 : role === "card" ? 22 : 12);
       ctx.fillStyle = selected ? accent : role === "panel" || role === "card" ? "#202744" : role === "metric" ? "#2b3455" : "#333d60";
       ctx.fill();
       ctx.strokeStyle = selected ? accent : "#465071"; ctx.lineWidth = 1; ctx.stroke();
     }
     if (role !== "panel") {
       const foreground = selected ? "#173e34" : element.disabled ? "#8490af" : "#f2f7ff";
-      ctx.fillStyle = role === "stars" ? "#ffd18c" : foreground;
+      ctx.fillStyle = foreground;
       ctx.textAlign = "center"; ctx.textBaseline = "middle";
       const card = role === "card", tool = role === "tool", brand = role === "brand";
       ctx.font = `700 ${card ? 25 : brand ? 19 : role === "metric" && element.secondary ? 20 : role === "text" ? 12 : 15}px sans-serif`;
