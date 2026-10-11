@@ -166,7 +166,8 @@ async function run(command = "check", { config = createConfig(), ci, protect, lo
 if (require.main === module) {
   run(process.argv[2] || "check").catch((error) => {
     console.error(`[wechat-ci] ${error.message}`);
-    process.exitCode = 1;
+    // The CI compiler can leave worker processes alive after an error.
+    process.exit(1);
   });
 }
 

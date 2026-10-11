@@ -2,6 +2,7 @@ const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
+const acorn = require("acorn");
 const { readSecret } = require("./wechat-fortify-key.cjs");
 
 const cliVersion = "0.1.8";
@@ -84,6 +85,7 @@ function verifyArtifacts(directory, files, expectedHashes) {
     const code = fs.readFileSync(jsPath, "utf8");
     if (!code.includes(marker)) throw new Error(`Missing fortify marker in ${file}; refusing to publish unprotected code.`);
     new vm.Script(code, { filename: file });
+    acorn.parse(code, { ecmaVersion: 2017, sourceType: "script" });
     const map = JSON.parse(fs.readFileSync(mapPath, "utf8"));
     if (map.version !== 3 || !Array.isArray(map.sources) || map.sources.length === 0 || !map.mappings ||
         !map.sources.some(source => /(^|\/)src\/.*\.ts$/.test(source))) {

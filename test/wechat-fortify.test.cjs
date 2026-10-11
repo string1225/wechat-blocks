@@ -132,6 +132,20 @@ test("mismatched appid and secret or backup files in the build are rejected befo
   assert.equal(requests, 0);
 });
 
+test("protected output containing syntax rejected by WeChat is stopped before upload", async t => {
+  const config = fixture(t);
+  let uploaded = false;
+  await assert.rejects(run("upload", { config, log() {},
+    ci: { Project: class { constructor() { uploaded = true; } } },
+    protect: async (...args) => {
+      await fakeProtect(...args);
+      fs.appendFileSync(path.join(args[1], "game.js"), "globalThis.testGame?.value;");
+      return true;
+    }
+  }), /Unexpected token/);
+  assert.equal(uploaded, false);
+});
+
 test("preview awaits protection and replaces an old QR only after a protected release is ready", async t => {
   const config = fixture(t);
   fs.writeFileSync(config.qrcodeOutputDest, "old QR");

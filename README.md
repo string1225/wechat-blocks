@@ -28,7 +28,7 @@ npm run typecheck
 
 可在未提交的 `wechat-ci.local.json` 中设置 `fortifySecretConfigPath`（私钥配置文件路径）、`fortifyTimeoutMinutes`（默认 30 分钟）、`fortifyProxy`。相应环境变量为 `WECHAT_FORTIFY_SECRET_CONFIG`、`WECHAT_FORTIFY_TIMEOUT_MINUTES`、`WECHAT_FORTIFY_PROXY`。私钥配置中的 appid 必须与上传的 appid 一致；密钥不得放入构建或发布目录。
 
-`npm run build:wechat` 在 `.wechat-build/` 生成未压缩 JS 及映射回 TypeScript 的 map，供加固服务处理；发布包在 `.wechat-release/project/`，可用微信开发者工具直接打开该目录验证。发布时关闭后续 JS 转译、压缩和普通代码保护，保持加固代码与 map 配对。未加固的 JS 及其备份、加固配置和私钥不进入发布包；最终 map 随微信包上传，用于线上错误定位。
+`npm run build:wechat` 在 `.wechat-build/` 生成未压缩 JS 及映射回 TypeScript 的 map，再将整个 bundle 的现代语法转译为 ES5 后交给加固服务，避免微信验包器拒绝可选链等语法。加固产物也会做语法检查。发布包在 `.wechat-release/project/`，可用微信开发者工具直接打开该目录验证。发布时关闭后续 JS 转译、压缩和普通代码保护，保持加固代码与 map 配对。未加固的 JS 及其备份、加固配置和私钥不进入发布包；最终 map 随微信包上传，用于线上错误定位。
 
 相同 appid、密钥公钥、代码、map、加固配置和 CLI 版本复用 `.wechat-fortify-cache/` 中经过哈希检查的结果，上传和预览无需重复消耗加固次数。修改输入会重新加固。生成目录均已加入 Git 忽略；其中包含敏感 map，不应部署到公开网站。浏览器开发和 `npm run build` 保持原有构建方式。
 

@@ -5,8 +5,22 @@ const CopyWebpackPlugin = require("copy-webpack-plugin");
 module.exports = (env = {}, argv) => {
   const isProduction = argv.mode === "production";
   const isWechat = env.wechat === true || env.wechat === "true";
+  const babelLoader = {
+    loader: "babel-loader",
+    options: {
+      configFile: false,
+      babelrc: false,
+      cacheDirectory: path.resolve(__dirname, ".wechat-fortify-cache/babel"),
+      cacheCompression: false,
+      presets: [[require.resolve("@babel/preset-env"), {
+        targets: { ie: "11" }, modules: false, bugfixes: true, useBuiltIns: false
+      }]]
+    }
+  };
+  const tsLoader = { loader: "ts-loader", options: { compilerOptions: { sourceMap: isWechat } } };
 
   return {
+    target: isWechat ? ["web", "es5"] : "web",
     entry: path.resolve(__dirname, "src/main.ts"),
     output: {
       filename: "game.js",
@@ -22,12 +36,10 @@ module.exports = (env = {}, argv) => {
       rules: [
         {
           test: /\.ts$/,
-          use: {
-            loader: "ts-loader",
-            options: { compilerOptions: { sourceMap: isWechat } }
-          },
+          use: isWechat ? [babelLoader, tsLoader] : [tsLoader],
           exclude: /node_modules/
-        }
+        },
+        ...(isWechat ? [{ test: /\.m?js$/, use: [babelLoader] }] : [])
       ]
     },
     plugins: [
