@@ -1,5 +1,6 @@
 {
   "privateKeyPath": "C:/path/to/private.APPID.key",
   "robot": 1,
-  "qrcodeOutputDest": "dist/preview-qrcode.jpg"
+  "qrcodeOutputDest": "dist/preview-qrcode.jpg",
+  "fortifyTimeoutMinutes": 30
 }

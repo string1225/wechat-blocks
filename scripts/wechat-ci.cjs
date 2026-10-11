@@ -1,12 +1,12 @@
 const fs = require("fs");
 const path = require("path");
-const ci = require("miniprogram-ci");
+const { defaultSecretPath } = require("./wechat-fortify-key.cjs");
+const { prepareProtectedProject, protectedSetting, validateFortifyConfig } = require("./wechat-fortify.cjs");
 
 const rootDir = path.resolve(__dirname, "..");
-const command = process.argv[2] || "check";
 const localConfigPath = path.join(rootDir, "wechat-ci.local.json");
 
-const allowedCommands = new Set(["check", "preview", "upload"]);
+const allowedCommands = new Set(["check", "fortify", "preview", "upload"]);
 
 function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, "utf8"));
@@ -52,12 +52,17 @@ function createConfig() {
   );
 
   return {
+    rootDir,
     appid: process.env.WECHAT_APPID || localConfig.appid || projectConfig.appid,
     desc:
       process.env.WECHAT_CI_DESC ||
       localConfig.desc ||
       `CI ${packageJson.version}`,
     privateKeyPath,
+    secretConfigPath: resolveFromRoot(process.env.WECHAT_FORTIFY_SECRET_CONFIG || localConfig.fortifySecretConfigPath || defaultSecretPath),
+    protectConfigPath: path.join(rootDir, "code.fortify.config.json"),
+    fortifyTimeoutMinutes: toInt(process.env.WECHAT_FORTIFY_TIMEOUT_MINUTES || localConfig.fortifyTimeoutMinutes, 30),
+    fortifyProxy: process.env.WECHAT_FORTIFY_PROXY || localConfig.fortifyProxy || "",
     qrcodeOutputDest,
     robot: toInt(process.env.WECHAT_CI_ROBOT || localConfig.robot, 1),
     version:
@@ -65,10 +70,10 @@ function createConfig() {
   };
 }
 
-function validateConfig(config) {
+function validateConfig(config, command) {
   if (!allowedCommands.has(command)) {
     throw new Error(
-      `Unknown command "${command}". Use check, preview, or upload.`
+      `Unknown command "${command}". Use check, fortify, preview, or upload.`
     );
   }
 
@@ -93,45 +98,46 @@ function validateConfig(config) {
   if (!config.version) {
     throw new Error("Missing upload version.");
   }
+
+  validateFortifyConfig(config);
 }
 
-function createProject(config) {
+function createProject(config, projectDir, ci) {
   return new ci.Project({
     appid: config.appid,
     type: "miniGame",
-    projectPath: rootDir,
+    projectPath: projectDir,
     privateKeyPath: config.privateKeyPath,
     ignores: ["node_modules/**/*"]
   });
 }
 
-async function run() {
-  const config = createConfig();
-  validateConfig(config);
+async function run(command = "check", { config = createConfig(), ci, protect, log = console.log } = {}) {
+  validateConfig(config, command);
 
-  console.log(`[wechat-ci] appid: ${config.appid}`);
-  console.log(`[wechat-ci] robot: ${config.robot}`);
-  console.log(`[wechat-ci] version: ${config.version}`);
-  console.log(
+  log(`[wechat-ci] appid: ${config.appid}`);
+  log(`[wechat-ci] robot: ${config.robot}`);
+  log(`[wechat-ci] version: ${config.version}`);
+  log(
     `[wechat-ci] private key: ${path.basename(config.privateKeyPath)}`
   );
 
   if (command === "check") {
-    console.log("[wechat-ci] configuration is ready");
+    log("[wechat-ci] local upload/fortify configuration is ready; MP public-key registration is verified when protecting");
     return;
   }
 
-  const project = createProject(config);
-  const setting = {
-    es6: true,
-    minify: true,
-    minifyJS: true
-  };
+  const release = await prepareProtectedProject(config, { protect, log });
+  if (command === "fortify") return release;
+  const client = ci || require("miniprogram-ci");
+  const project = createProject(config, release.projectDir, client);
+  const setting = { ...protectedSetting };
 
   if (command === "preview") {
     fs.mkdirSync(path.dirname(config.qrcodeOutputDest), { recursive: true });
+    fs.rmSync(config.qrcodeOutputDest, { force: true });
 
-    await ci.preview({
+    await client.preview({
       project,
       desc: config.desc,
       setting,
@@ -141,11 +147,11 @@ async function run() {
       onProgressUpdate: console.log
     });
 
-    console.log(`[wechat-ci] preview qrcode: ${config.qrcodeOutputDest}`);
+    log(`[wechat-ci] preview qrcode: ${config.qrcodeOutputDest}`);
     return;
   }
 
-  await ci.upload({
+  await client.upload({
     project,
     version: config.version,
     desc: config.desc,
@@ -154,10 +160,14 @@ async function run() {
     onProgressUpdate: console.log
   });
 
-  console.log("[wechat-ci] upload finished");
+  log("[wechat-ci] protected upload finished");
 }
 
-run().catch((error) => {
-  console.error(`[wechat-ci] ${error.message}`);
-  process.exitCode = 1;
-});
+if (require.main === module) {
+  run(process.argv[2] || "check").catch((error) => {
+    console.error(`[wechat-ci] ${error.message}`);
+    process.exitCode = 1;
+  });
+}
+
+module.exports = { createConfig, run };

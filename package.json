@@ -6,11 +6,14 @@
   "scripts": {
     "dev": "webpack serve --config webpack.config.cjs --mode development",
     "build": "webpack --config webpack.config.cjs --mode production",
+    "build:wechat": "webpack --config webpack.config.cjs --mode production --env wechat",
     "test": "node --test test/*.test.cjs",
     "typecheck": "tsc --noEmit",
     "wechat:check": "node scripts/wechat-ci.cjs check",
-    "wechat:preview": "npm run build && node scripts/wechat-ci.cjs preview",
-    "wechat:upload": "npm run build && node scripts/wechat-ci.cjs upload"
+    "wechat:fortify:keygen": "node scripts/wechat-fortify-key.cjs",
+    "wechat:fortify": "npm run build:wechat && node scripts/wechat-ci.cjs fortify",
+    "wechat:preview": "npm run build:wechat && node scripts/wechat-ci.cjs preview",
+    "wechat:upload": "npm run build:wechat && node scripts/wechat-ci.cjs upload"
   },
   "license": "MIT",
   "dependencies": {
@@ -21,6 +24,7 @@
     "@types/three": "^0.184.1",
     "copy-webpack-plugin": "^14.0.0",
     "html-webpack-plugin": "^5.6.7",
+    "minigame-code-fortify-cli": "0.1.8",
     "miniprogram-ci": "2.1.31",
     "ts-loader": "^9.6.0",
     "typescript": "^6.0.3",

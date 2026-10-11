@@ -15,6 +15,23 @@ npm run typecheck
 
 浏览器预览默认运行在 `http://127.0.0.1:3000`。微信开发者工具可选择本目录，项目配置会指向 `dist/` 作为小游戏根目录；先运行 `npm run build` 生成 `dist/game.js` 和 `dist/game.json`。
 
+## 微信发布与游戏深度保护
+
+`npm run wechat:upload` 和 `npm run wechat:preview` 会自动先构建，再调用微信游戏深度保护 CLI，最后上传经过检查的完整游戏包。默认对 `game.js` 开启水印和 2 级混淆；等级在 `code.fortify.config.json` 中配置。加固返回失败、缺少加固标记、map 未映射回 TypeScript 时会停止发布，不回退到明文代码；缓存损坏会重新请求加固。CLI 要求 Node.js 17.5.0 或更新版本，本项目构建和发布在 Node.js 24.13.0 下验证。
+
+首次配置：
+
+1. 执行 `npm run wechat:fortify:keygen`。专用私钥配置默认保存在用户目录的 `.wechat-blocks/fortify/id_rsa.conf`，同目录的 `public.pem` 是对应的 PEM 公钥。重复执行保留现有密钥。
+2. 小游戏管理员在微信 MP 后台「开发支持 → 研发工具箱 → 密钥管理」登记 `public.pem` 中的完整公钥。加固密钥与现有 CI 上传密钥分别配置。
+3. 保持 `wechat-ci.local.json` 中的 `privateKeyPath` 指向上传密钥，执行 `npm run wechat:check` 检查本地配置，再执行 `npm run wechat:fortify` 验证后台加固权限。
+4. 真机验证加固后的游戏，然后执行 `npm run wechat:upload` 和 `npm run wechat:preview`。首次加固或核心逻辑大幅改动时应充分测试并灰度发布。
+
+可在未提交的 `wechat-ci.local.json` 中设置 `fortifySecretConfigPath`（私钥配置文件路径）、`fortifyTimeoutMinutes`（默认 30 分钟）、`fortifyProxy`。相应环境变量为 `WECHAT_FORTIFY_SECRET_CONFIG`、`WECHAT_FORTIFY_TIMEOUT_MINUTES`、`WECHAT_FORTIFY_PROXY`。私钥配置中的 appid 必须与上传的 appid 一致；密钥不得放入构建或发布目录。
+
+`npm run build:wechat` 在 `.wechat-build/` 生成未压缩 JS 及映射回 TypeScript 的 map，供加固服务处理；发布包在 `.wechat-release/project/`，可用微信开发者工具直接打开该目录验证。发布时关闭后续 JS 转译、压缩和普通代码保护，保持加固代码与 map 配对。未加固的 JS 及其备份、加固配置和私钥不进入发布包；最终 map 随微信包上传，用于线上错误定位。
+
+相同 appid、密钥公钥、代码、map、加固配置和 CLI 版本复用 `.wechat-fortify-cache/` 中经过哈希检查的结果，上传和预览无需重复消耗加固次数。修改输入会重新加固。生成目录均已加入 Git 忽略；其中包含敏感 map，不应部署到公开网站。浏览器开发和 `npm run build` 保持原有构建方式。
+
 浏览器打开 `http://127.0.0.1:3000/?sceneHud=1` 可检查微信端使用的画布界面：深蓝顶部通栏贴顶并延伸到两侧，显示难度、计时和剩余方块；底部通栏贴底并延伸到两侧，重置、撤销、炸弹和自动四个按钮无间隙等分宽度，旋转缩放提示位于按钮上方，通关弹窗提供下一关。可连续点击不同方块；退出棋盘的方块立即让路，仍在棋盘内滑动的方块预占终点，撤销按每次操作回退并暂停自动。被挡住的方块会抖动并闪黄，不扣步数。箭头直接绘制在方块表面，前方空白面保持原色，背面略暗；拖动和双指缩放不会误触方块。上下左右均可完整绕转，经过顶部和底部保持连续视角；拖动绕屏幕轴旋转，翻转后左右操作仍保持一致。竖屏默认按完整棋盘投影约占屏宽 90% 取景，短屏/横屏优先避开上下工具栏。自动开启后按钮变为薄荷绿，暂停恢复深蓝；炸弹选中为暖黄色。
 
 点击炸弹进入选中状态并暂停自动，再点击格子会高亮目标并弹出确认框。确认后只移除该格子，即使被挡住也可移除；取消保留选中模式以便换一个目标，再点炸弹可退出模式。只有确认才消耗 1 枚炸弹和 1 步，双击确认不会重复扣除。
